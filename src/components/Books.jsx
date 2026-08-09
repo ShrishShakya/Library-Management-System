@@ -1,0 +1,279 @@
+import React, { useState, useMemo } from 'react';
+import { useData } from '../hooks/useData';
+import Modal from './Modal';
+
+// ✅ Static category list
+const CATEGORIES = [
+  'Fiction',
+  'Science',
+  'Social Science',
+  'Technology',
+  'History & Geography',
+  'Business',
+  'Education',
+  'Programming',
+  'Biography',
+  'Philosophy',
+  'Arts',
+  'Health',
+  'Travel',
+  'Cooking',
+  'Religion',
+  'Literature',
+  'Language',
+  'Self-help',
+  'Others'
+];
+
+export default function Books() {
+  const { data, addBook, editBook, deleteBook } = useData();
+  const books = data.books || [];
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [publisherFilter, setPublisherFilter] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState({
+    title: '',
+    author: '',
+    isbn: '',
+    category: '',
+    publishYear: new Date().getFullYear(),
+    publisher: '',
+    quantity: 1,
+    description: ''
+  });
+
+  // Dynamic categories for filter (from existing books)
+  const filterCategories = useMemo(() => {
+    const set = new Set(books.map(b => b.category).filter(Boolean));
+    return ['All Categories', ...Array.from(set)];
+  }, [books]);
+
+  // Dynamic publishers for filter
+  const publishers = useMemo(() => {
+    const set = new Set(books.map(b => b.publisher).filter(Boolean));
+    return ['All Publishers', ...Array.from(set)];
+  }, [books]);
+
+  const filtered = useMemo(() => {
+    let list = books;
+    if (search.trim()) {
+      const s = search.toLowerCase();
+      list = list.filter(b =>
+        b.title.toLowerCase().includes(s) ||
+        b.author.toLowerCase().includes(s) ||
+        (b.isbn && b.isbn.toLowerCase().includes(s)) ||
+        (b.publisher && b.publisher.toLowerCase().includes(s))
+      );
+    }
+    if (categoryFilter && categoryFilter !== 'All Categories') {
+      list = list.filter(b => b.category === categoryFilter);
+    }
+    if (publisherFilter && publisherFilter !== 'All Publishers') {
+      list = list.filter(b => b.publisher === publisherFilter);
+    }
+    return list;
+  }, [books, search, categoryFilter, publisherFilter]);
+
+  const openModal = (book = null) => {
+    if (book) {
+      setEditingId(book.id);
+      setForm({
+        title: book.title,
+        author: book.author,
+        isbn: book.isbn || '',
+        category: book.category || '',
+        publishYear: book.publishYear || new Date().getFullYear(),
+        publisher: book.publisher || '',
+        quantity: book.quantity,
+        description: book.description || ''
+      });
+    } else {
+      setEditingId(null);
+      setForm({
+        title: '',
+        author: '',
+        isbn: '',
+        category: '',
+        publishYear: new Date().getFullYear(),
+        publisher: '',
+        quantity: 1,
+        description: ''
+      });
+    }
+    setModalOpen(true);
+  };
+
+  const closeModal = () => { setModalOpen(false); setEditingId(null); };
+
+  const handleSubmit = () => {
+    if (!form.title.trim() || !form.author.trim()) return;
+    const payload = {
+      title: form.title.trim(),
+      author: form.author.trim(),
+      isbn: form.isbn.trim() || 'N/A',
+      category: form.category.trim() || 'Others',
+      publishYear: parseInt(form.publishYear) || new Date().getFullYear(),
+      publisher: form.publisher.trim() || 'Independent',
+      quantity: parseInt(form.quantity) || 1,
+      description: form.description.trim() || '',
+    };
+    if (editingId) {
+      const old = books.find(b => b.id === editingId);
+      const diff = payload.quantity - old.quantity;
+      editBook(editingId, { ...payload, available: Math.max(0, old.available + diff) });
+    } else {
+      addBook({ ...payload, available: payload.quantity });
+    }
+    closeModal();
+  };
+
+  const handleDelete = (id) => {
+    if (window.confirm('Delete this book? This will also remove associated borrow and booking records.')) {
+      deleteBook(id);
+    }
+  };
+
+  return (
+    <div>
+      {/* Toolbar */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-4 flex flex-wrap gap-3 items-center">
+        <div className="flex-1 min-w-[240px] flex flex-wrap gap-2">
+          <input
+            type="text"
+            placeholder="Search title, author, publisher, ISBN..."
+            className="flex-1 border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            className="border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            {filterCategories.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select
+            className="border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            value={publisherFilter}
+            onChange={(e) => setPublisherFilter(e.target.value)}
+          >
+            {publishers.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <button className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition text-sm flex items-center gap-1 shadow-sm" onClick={() => openModal()}>
+          <i className="fas fa-plus mr-1" /> Add Book
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          {filtered.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">
+              <i className="fas fa-book text-4xl block mb-2" />
+              <p>{search || categoryFilter || publisherFilter ? 'No matching books found.' : 'No books in the library yet.'}</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500 border-b">
+                <tr>
+                  <th className="px-4 py-3 text-left">Title</th>
+                  <th className="px-4 py-3 text-left">Author</th>
+                  <th className="px-4 py-3 text-left">Category</th>
+                  <th className="px-4 py-3 text-left">Publisher</th>
+                  <th className="px-4 py-3 text-left">Year</th>
+                  <th className="px-4 py-3 text-left">Qty</th>
+                  <th className="px-4 py-3 text-left">Avail.</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(b => (
+                  <tr key={b.id} className="border-b hover:bg-slate-50">
+                    <td className="px-4 py-3 font-medium text-slate-900 max-w-[180px] truncate" title={b.title}>
+                      {b.title}
+                      <span className="block text-xs text-slate-400 font-normal">ISBN: {b.isbn || '—'}</span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">{b.author}</td>
+                    <td className="px-4 py-3"><span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full text-xs font-medium">{b.category || '—'}</span></td>
+                    <td className="px-4 py-3 text-slate-600 text-xs">{b.publisher || '—'}</td>
+                    <td className="px-4 py-3 text-slate-600 text-xs font-semibold">{b.publishYear || '—'}</td>
+                    <td className="px-4 py-3">{b.quantity}</td>
+                    <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${b.available > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{b.available}</span></td>
+                    <td className="px-4 py-3 text-right space-x-1">
+                      <button className="text-blue-500 hover:text-blue-700 text-xs bg-blue-50 px-2 py-1 rounded" onClick={() => openModal(b)} title="Edit Book"><i className="fas fa-pen" /></button>
+                      <button className="text-red-500 hover:text-red-700 text-xs bg-red-50 px-2 py-1 rounded" onClick={() => handleDelete(b.id)} title="Delete Book"><i className="fas fa-trash" /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Modal */}
+      <Modal isOpen={modalOpen} onClose={closeModal} title={editingId ? 'Edit Book' : 'Add New Book'}>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Title *</label>
+            <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" value={form.title} onChange={(e) => setForm({...form, title: e.target.value})} placeholder="Book title" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Author *</label>
+            <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" value={form.author} onChange={(e) => setForm({...form, author: e.target.value})} placeholder="Author name" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">ISBN</label>
+              <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" value={form.isbn} onChange={(e) => setForm({...form, isbn: e.target.value})} placeholder="ISBN number" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Category</label>
+              <select
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                value={form.category}
+                onChange={(e) => setForm({...form, category: e.target.value})}
+              >
+                <option value="">Select category</option>
+                {CATEGORIES.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Publisher</label>
+              <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" value={form.publisher} onChange={(e) => setForm({...form, publisher: e.target.value})} placeholder="e.g. Penguin" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Publication Year</label>
+              <input type="number" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" value={form.publishYear} onChange={(e) => setForm({...form, publishYear: e.target.value})} min={1000} max={2100} />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Total Quantity</label>
+            <input type="number" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" value={form.quantity} onChange={(e) => setForm({...form, quantity: parseInt(e.target.value) || 1})} min={1} />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Description</label>
+            <textarea rows="2" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" value={form.description} onChange={(e) => setForm({...form, description: e.target.value})} placeholder="Brief summary" />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 mt-4">
+          <button className="px-4 py-2 rounded-lg border text-slate-600 hover:bg-slate-50 text-sm" onClick={closeModal}>Cancel</button>
+          <button className="px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 text-sm font-medium" onClick={handleSubmit}>{editingId ? 'Update Book' : 'Add Book'}</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
