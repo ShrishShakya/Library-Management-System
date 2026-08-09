@@ -1,8 +1,8 @@
-# 📚 Library Management System
+# Library Management System
 
 A modern, responsive web application for managing library inventory, member directory, borrowing & return workflows, and analytics reporting.
 
-## 🚀 Features
+## Features
 - **Dashboard**: High-level overview of total books, available copies, registered members, active borrows, and overdue alerts.
 - **Books Management**: Search books by title, author, or ISBN. Filter by category, and easily add, edit, or remove book records.
 - **Members Directory**: Manage library members, track membership dates, and toggle active/inactive status.
@@ -10,14 +10,14 @@ A modern, responsive web application for managing library inventory, member dire
 - **Reports & Analytics**: Track most borrowed books, most active members, total transaction counts, and overdue warnings.
 - **Data Persistence**: Uses browser `localStorage` with initial sample seed data.
 
-## 🛠️ Built With
+## Built With
 - **React 18**
 - **Vite**
 - **React Router DOM v6**
 - **Tailwind CSS v3**
 - **FontAwesome 6**
 
-## 💻 Getting Started
+## Getting Started
 
 ### Installation
 ```bash
