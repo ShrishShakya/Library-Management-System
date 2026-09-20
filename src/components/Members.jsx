@@ -50,17 +50,11 @@ export default function Members() {
         (m) =>
           m.name.toLowerCase().includes(s) ||
           (m.email || '').toLowerCase().includes(s) ||
-          (m.phone || '').includes(s) ||
-          (m.membershipId || '').toLowerCase().includes(s)
+          (m.phone || '').includes(s)
       );
     }
     return list;
   }, [members, roleFilter, statusFilter, search]);
-
-  const nextMembershipId = useMemo(
-    () => generateMembershipId(members.map((m) => m.membershipId).filter(Boolean)),
-    [members]
-  );
 
   const openModal = (member = null) => {
     if (member) {
@@ -126,7 +120,7 @@ export default function Members() {
             <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
             <input
               type="text"
-              placeholder="Search by name, email, phone, ID..."
+              placeholder="Search by name, email, phone..."
               className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -174,7 +168,6 @@ export default function Members() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500 border-b text-xs">
                 <tr>
-                  <th className="px-4 py-3 text-left">Membership ID</th>
                   <th className="px-4 py-3 text-left">Name & Role</th>
                   <th className="px-4 py-3 text-left">Contact Info</th>
                   <th className="px-4 py-3 text-left">Joined Date</th>
@@ -191,10 +184,6 @@ export default function Members() {
 
                   return (
                     <tr key={m.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">
-                        {m.membershipId || '—'}
-                      </td>
-
                       <td className="px-4 py-3">
                         <div className="font-semibold text-slate-900">{m.name}</div>
                         <div>
@@ -279,15 +268,6 @@ export default function Members() {
 
       {/* Modal */}
       <Modal isOpen={modalOpen} onClose={closeModal} title={editingId ? 'Edit Account' : 'Add New Member / Administrator'}>
-        {!editingId && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-3 text-sm">
-            <i className="fas fa-id-card text-blue-600 mr-2" />
-            Assigned Membership ID: <strong className="font-mono text-blue-900">{nextMembershipId}</strong>
-            <span className="block text-xs text-slate-500 mt-1">
-              Joined date is automatically set to today. Membership validity defaults to 1 year.
-            </span>
-          </div>
-        )}
 
         <div className="space-y-3">
           <div>

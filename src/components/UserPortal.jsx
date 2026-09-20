@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../hooks/useData';
 import {
-  formatCurrency, formatDate, isMembershipExpired, daysBetween, today, daysFromNow,
+  formatCurrency, formatDate, isMembershipExpired, daysBetween, today, daysFromNow, getBorrowFee,
 } from '../utils/helpers';
 import BookDetailModal from './BookDetailModal';
 
@@ -299,6 +299,9 @@ export default function UserPortal() {
                       <i className={`fas ${isAvailable ? 'fa-check-circle' : 'fa-times-circle'}`} />
                       {isAvailable ? `${book.available} Available` : 'Out of Stock'}
                     </span>
+                    <span className="block text-[11px] text-slate-500 font-medium mt-0.5">
+                      Fee: {formatCurrency(getBorrowFee(book, settings), settings?.currency)}
+                    </span>
                   </div>
 
                   {booked ? (
@@ -401,13 +404,16 @@ export default function UserPortal() {
 
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs space-y-1.5 text-blue-950">
                 <div className="flex justify-between">
-                  <span className="text-slate-600">Reservation Fee:</span>
-                  <strong className="text-blue-900">{formatCurrency(settings?.reservationFee, settings?.currency)}</strong>
+                  <span className="text-slate-600">Reservation Cost:</span>
+                  <strong className="text-emerald-700 font-bold">Free (Hold Only)</strong>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-600">Hold Duration:</span>
-                  <strong className="text-blue-900">{settings?.reservationHoldDays} days after pickup date</strong>
+                  <strong className="text-blue-900">{settings?.reservationHoldDays || 3} days after pickup date</strong>
                 </div>
+                <p className="text-[11px] text-slate-500 pt-1 border-t border-blue-200/60">
+                  Borrow fee ({formatCurrency(getBorrowFee(reserveBook, settings), settings?.currency)}) is charged when you pick up the book.
+                </p>
               </div>
             </div>
 

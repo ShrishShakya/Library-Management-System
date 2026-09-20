@@ -9,13 +9,15 @@ import BookDetailModal from './BookDetailModal';
 const CATEGORIES = [
   'Fiction',
   'Science',
+  "Children's Book",
+  'Academic (Nepal)',
+  'Programming',
+  'Biography',
+  'Business',
   'Social Science',
   'Technology',
   'History & Geography',
-  'Business',
   'Education',
-  'Programming',
-  'Biography',
   'Philosophy',
   'Arts',
   'Health',
@@ -25,7 +27,7 @@ const CATEGORIES = [
   'Literature',
   'Language',
   'Self-help',
-  'Others'
+  'Others',
 ];
 
 export default function Books() {
@@ -289,34 +291,66 @@ export default function Books() {
         <div className="space-y-3">
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Cover Image</label>
-            <div className="flex items-center gap-3">
-              <div className="w-16 h-20 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border border-slate-200 shadow-inner">
+            <div className="flex items-start gap-3">
+              {/* Preview */}
+              <div className="w-20 h-28 bg-slate-100 rounded-xl flex items-center justify-center overflow-hidden border border-slate-200 shadow-inner flex-shrink-0">
                 {form.coverImage ? (
-                  <img src={form.coverImage} alt="cover" className="w-full h-full object-cover" />
+                  <img
+                    src={form.coverImage}
+                    alt="cover preview"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = '';
+                    }}
+                  />
                 ) : (
-                  <i className="fas fa-image text-slate-300 text-xl" />
+                  <i className="fas fa-image text-slate-300 text-2xl" />
                 )}
               </div>
-              <div className="flex-1 space-y-1">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="text-xs file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const b64 = await fileToBase64(file);
-                    setForm((prev) => ({ ...prev, coverImage: b64 }));
-                  }}
-                />
+
+              <div className="flex-1 space-y-2">
+                {/* URL input */}
+                <div>
+                  <input
+                    type="text"
+                    className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 font-mono"
+                    value={form.coverImage}
+                    onChange={(e) => setForm({ ...form, coverImage: e.target.value })}
+                    placeholder="Paste image URL (https://...)"
+                  />
+                </div>
+
+                {/* OR divider */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-px bg-slate-200" />
+                  <span className="text-[10px] text-slate-400 uppercase font-bold">OR upload file</span>
+                  <div className="flex-1 h-px bg-slate-200" />
+                </div>
+
+                {/* File upload */}
+                <div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="text-xs file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const b64 = await fileToBase64(file);
+                      setForm((prev) => ({ ...prev, coverImage: b64 }));
+                    }}
+                  />
+                </div>
+
                 {form.coverImage && (
                   <div>
                     <button
                       type="button"
-                      className="text-xs text-red-500 hover:underline"
+                      className="text-xs text-red-500 hover:underline inline-flex items-center gap-1"
                       onClick={() => setForm((prev) => ({ ...prev, coverImage: '' }))}
                     >
-                      <i className="fas fa-trash-can mr-1" /> Remove image
+                      <i className="fas fa-trash-can text-[10px]" /> Remove cover
                     </button>
                   </div>
                 )}

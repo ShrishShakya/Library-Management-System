@@ -108,9 +108,6 @@ export default function Layout({ children }) {
                       {isAdmin ? 'Admin' : 'Member'}
                     </span>
                   </div>
-                  <span className="text-[11px] font-mono text-slate-400 font-semibold">
-                    ID: {currentUser.membershipId || '—'}
-                  </span>
                 </div>
               </div>
             )}

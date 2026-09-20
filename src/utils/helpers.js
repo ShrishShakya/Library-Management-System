@@ -49,6 +49,17 @@ export const capFine = (amount) => {
   return Math.min(Math.max(0, n), MAX_FINE_AMOUNT);
 };
 
+// ── Borrow fee helper ────────────────────────────────────────
+// Returns the applicable fee for issuing a book (Rs. 10 for Academic Nepal, Rs. 50 for others).
+export const getBorrowFee = (book, settings = {}) => {
+  const academicCats = settings?.academicCategories || ['Academic (Nepal)'];
+  const isAcademic = book && academicCats.includes(book.category);
+  if (isAcademic) {
+    return Number(settings?.borrowFeeAcademic !== undefined ? settings.borrowFeeAcademic : 10.0);
+  }
+  return Number(settings?.borrowFee !== undefined ? settings.borrowFee : 50.0);
+};
+
 // ── Phone normalization ─────────────────────────────────────
 export const normalizePhone = (p) => (p ? String(p).replace(/\D/g, '') : '');
 

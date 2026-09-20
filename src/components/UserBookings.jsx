@@ -61,7 +61,7 @@ export default function UserBookings() {
                     <th className="pb-3 px-3">Book Title</th>
                     <th className="pb-3 px-3">Reserved On</th>
                     <th className="pb-3 px-3">Pickup Date</th>
-                    <th className="pb-3 px-3">Reservation Fee</th>
+                    <th className="pb-3 px-3">Reservation Hold</th>
                     <th className="pb-3 px-3">Status</th>
                     <th className="pb-3 px-3 text-right">Actions</th>
                   </tr>
@@ -97,7 +97,7 @@ export default function UserBookings() {
                         </td>
                         <td className="py-3 px-3 text-slate-600 text-xs">{formatDate(res.reservedDate || res.bookingDate)}</td>
                         <td className="py-3 px-3 text-slate-700 text-xs font-semibold">{formatDate(res.pickupDate || res.expiresAt)}</td>
-                        <td className="py-3 px-3 text-xs font-medium">{formatCurrency(res.fee, settings?.currency)}</td>
+                        <td className="py-3 px-3 text-xs font-semibold text-emerald-700">Free</td>
                         <td className="py-3 px-3">
                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                             res.status === 'pending'
@@ -152,8 +152,9 @@ export default function UserBookings() {
                     <th className="pb-3 px-3">Book Title</th>
                     <th className="pb-3 px-3">Borrowed On</th>
                     <th className="pb-3 px-3">Due Date</th>
+                    <th className="pb-3 px-3">Borrow Fee</th>
                     <th className="pb-3 px-3">Status</th>
-                    <th className="pb-3 px-3">Fine / Fee</th>
+                    <th className="pb-3 px-3">Overdue Fine</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -188,6 +189,9 @@ export default function UserBookings() {
                         </td>
                         <td className="py-3 px-3 text-slate-600 text-xs">{formatDate(br.borrowDate)}</td>
                         <td className="py-3 px-3 text-slate-600 text-xs font-medium">{formatDate(br.dueDate)}</td>
+                        <td className="py-3 px-3 text-slate-800 text-xs font-semibold">
+                          {br.borrowFee != null ? formatCurrency(br.borrowFee, settings?.currency) : '—'}
+                        </td>
                         <td className="py-3 px-3">
                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                             br.status === 'lost'

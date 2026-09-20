@@ -89,8 +89,7 @@ export default function Reservations() {
         <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-2xl p-4 text-sm flex flex-wrap items-center justify-between gap-2">
           <div>
             <i className="fas fa-circle-info mr-2 text-blue-600" />
-            Reservation fee: <strong>{formatCurrency(settings?.reservationFee, settings?.currency)}</strong> ·
-            Hold period: <strong>{settings?.reservationHoldDays} days after pickup</strong>
+            Reservations are <strong>Free holds</strong> · Hold period: <strong>{settings?.reservationHoldDays || 3} days after pickup</strong>
           </div>
           <div className="font-semibold text-xs bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
             Active reservations: {myActiveCount} / {settings?.maxReservationsPerUser || 3}
@@ -118,7 +117,7 @@ export default function Reservations() {
           >
             <option value="">All members</option>
             {members.map((m) => (
-              <option key={m.id} value={m.id}>{m.name} ({m.membershipId || m.email})</option>
+              <option key={m.id} value={m.id}>{m.name} ({m.email})</option>
             ))}
           </select>
         )}
@@ -181,10 +180,10 @@ export default function Reservations() {
               <thead className="bg-slate-50 text-slate-500 border-b text-xs">
                 <tr>
                   <th className="px-4 py-3 text-left">Book</th>
-                  {isAdmin && <th className="px-4 py-3 text-left">Member & ID</th>}
+                  {isAdmin && <th className="px-4 py-3 text-left">Member</th>}
                   <th className="px-4 py-3 text-left">Reserved On</th>
                   <th className="px-4 py-3 text-left">Pickup Date</th>
-                  <th className="px-4 py-3 text-left">Reservation Fee</th>
+                  <th className="px-4 py-3 text-left">Reservation Hold</th>
                   <th className="px-4 py-3 text-left">Status</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
@@ -209,13 +208,13 @@ export default function Reservations() {
                       {isAdmin && (
                         <td className="px-4 py-3">
                           <div className="font-medium text-slate-800">{m?.name || 'Unknown'}</div>
-                          <div className="text-[10px] font-mono text-slate-400">{m?.membershipId || m?.email}</div>
+                          <div className="text-[10px] text-slate-400">{m?.email}</div>
                         </td>
                       )}
 
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(r.reservedDate || r.bookingDate)}</td>
                       <td className="px-4 py-3 text-xs font-semibold text-slate-700">{formatDate(r.pickupDate || r.expiresAt)}</td>
-                      <td className="px-4 py-3 text-xs font-semibold">{formatCurrency(r.fee, settings?.currency)}</td>
+                      <td className="px-4 py-3 text-xs font-semibold text-emerald-700">Free</td>
                       <td className="px-4 py-3">
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                           r.status === 'pending'
@@ -311,13 +310,16 @@ export default function Reservations() {
 
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs space-y-1.5 text-blue-950">
                 <div className="flex justify-between">
-                  <span className="text-slate-600">Reservation Fee:</span>
-                  <strong className="text-blue-900">{formatCurrency(settings?.reservationFee, settings?.currency)}</strong>
+                  <span className="text-slate-600">Reservation Cost:</span>
+                  <strong className="text-emerald-700 font-bold">Free (Hold Only)</strong>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-600">Hold Duration:</span>
-                  <strong className="text-blue-900">{settings?.reservationHoldDays} days after pickup date</strong>
+                  <strong className="text-blue-900">{settings?.reservationHoldDays || 3} days after pickup date</strong>
                 </div>
+                <p className="text-[11px] text-slate-500 pt-1 border-t border-blue-200/60">
+                  Borrow fee ({settings?.currency || 'NRs.'} {settings?.borrowFee || 50} standard, {settings?.currency || 'NRs.'} {settings?.borrowFeeAcademic || 10} academic) is charged when you pick up the book.
+                </p>
               </div>
             </div>
 

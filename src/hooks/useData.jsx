@@ -5,14 +5,14 @@ import {
   uid, today, daysFromNow, daysBetween, formatDate, formatCurrency,
   calculateOverdueFine, generateMembershipId, simpleHash, isOverdue,
   isMembershipExpired, isMembershipExpiringSoon, normalizePhone,
-  capFine, MAX_FINE_AMOUNT,
+  capFine, MAX_FINE_AMOUNT, getBorrowFee,
 } from '../utils/helpers';
 
 export {
   uid, today, daysFromNow, daysBetween, formatDate, formatCurrency,
   calculateOverdueFine, generateMembershipId, simpleHash, isOverdue,
   isMembershipExpired, isMembershipExpiringSoon, normalizePhone,
-  capFine, MAX_FINE_AMOUNT,
+  capFine, MAX_FINE_AMOUNT, getBorrowFee,
 };
 
 const DB_KEY = 'lms_data';
@@ -24,8 +24,11 @@ export const DEFAULT_SETTINGS = {
   // Membership validation
   membershipDurationDays: 365,
   membershipRenewalFee: 500.0,
-  // Reservation / booking
-  reservationFee: 50.0,
+  // Borrow fees
+  borrowFee: 50.0,
+  borrowFeeAcademic: 10.0,
+  academicCategories: ['Academic (Nepal)'],
+  // Reservation / booking (Free holds)
   reservationHoldDays: 3,
   maxReservationsPerUser: 3,
   // Overdue fines — tiered in NRs.
@@ -122,28 +125,325 @@ const seedSampleData = () => {
     saveData(data);
   }
 
-  if (data.books.length > 0 && data.members.length > 1) {
-    return;
-  }
-
   const sampleBooks = [
-    { id: uid(), title: 'The Great Gatsby', author: 'F. Scott Fitzgerald',
-      isbn: '978-0-7432-7356-5', category: 'Fiction', quantity: 4, available: 4,
-      description: 'A classic story of wealth, love, and the American dream set in the Jazz Age on Long Island.',
-      coverImage: '', addedDate: today() },
-    { id: uid(), title: 'To Kill a Mockingbird', author: 'Harper Lee',
-      isbn: '978-0-06-112008-4', category: 'Fiction', quantity: 3, available: 2,
-      description: 'The unforgettable novel of a childhood in a sleepy Southern town and the crisis of conscience that rocked it.',
-      coverImage: '', addedDate: today() },
-    { id: uid(), title: '1984', author: 'George Orwell',
-      isbn: '978-0-452-28423-4', category: 'Science', quantity: 5, available: 5,
-      description: 'A dystopian masterpiece about totalitarianism, surveillance, and the eradication of truth.',
-      coverImage: '', addedDate: today() },
-    { id: uid(), title: 'The Hobbit', author: 'J.R.R. Tolkien',
-      isbn: '978-0-547-92822-7', category: 'Fantasy', quantity: 4, available: 4,
-      description: 'Bilbo Baggins embarks on a thrilling quest with Gandalf and thirteen dwarves to reclaim the lost kingdom of Erebor.',
-      coverImage: '', addedDate: today() },
+    // ── 1. Fiction ───────────────────────────────────────────
+    {
+      id: uid(),
+      title: 'The Great Gatsby',
+      author: 'F. Scott Fitzgerald',
+      isbn: '9780743273565',
+      category: 'Fiction',
+      publishYear: 1925,
+      publisher: 'Scribner',
+      quantity: 5,
+      available: 5,
+      description: 'Set in the decadent summer of 1922 on Long Island, this quintessential American tragedy follows the mysterious millionaire Jay Gatsby and his obsessive passion for the beautiful Daisy Buchanan. Through the observant eyes of narrator Nick Carraway, the novel explores extravagant jazz parties, unfulfilled romance, and the tragic illusions of the American Dream.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780743273565-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: 'To Kill a Mockingbird',
+      author: 'Harper Lee',
+      isbn: '9780061120084',
+      category: 'Fiction',
+      publishYear: 1960,
+      publisher: 'HarperCollins',
+      quantity: 4,
+      available: 3,
+      description: 'Set in the fictional town of Maycomb, Alabama during the Great Depression, six-year-old Scout Finch watches her father, Atticus Finch, defend Tom Robinson—a Black man falsely accused of a terrible crime. A timeless masterpiece exploring racial injustice, compassion, courage, and the fragile nature of childhood innocence.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780061120084-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: '1984',
+      author: 'George Orwell',
+      isbn: '9780451524935',
+      category: 'Fiction',
+      publishYear: 1949,
+      publisher: 'Signet Classic',
+      quantity: 6,
+      available: 6,
+      description: 'In the grim superstate of Oceania under the omnipresent surveillance of Big Brother, Winston Smith works at the Ministry of Truth rewriting history to match party propaganda. As Winston dares to commit thoughtcrime and embarks on a forbidden romance with Julia, he enters a perilous rebellion against total psychological and political domination.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780451524935-L.jpg',
+      addedDate: today(),
+    },
+
+    // ── 2. Science ───────────────────────────────────────────
+    {
+      id: uid(),
+      title: 'A Brief History of Time',
+      author: 'Stephen Hawking',
+      isbn: '9780553380163',
+      category: 'Science',
+      publishYear: 1988,
+      publisher: 'Bantam Books',
+      quantity: 4,
+      available: 4,
+      description: 'Theoretical physicist Stephen Hawking takes non-specialist readers on an exhilarating voyage through cosmology, from the Big Bang and black holes to general relativity and quantum mechanics. He demystifies the fabric of spacetime and the arrow of time in search of a unified theory explaining our entire cosmos.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780553380163-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: 'Cosmos',
+      author: 'Carl Sagan',
+      isbn: '9780345331359',
+      category: 'Science',
+      publishYear: 1980,
+      publisher: 'Ballantine Books',
+      quantity: 5,
+      available: 5,
+      description: "Carl Sagan explores fifteen billion years of cosmic evolution and the mutual development of science and human civilization. Blending science, philosophy, and history, Sagan illuminates humanity's place in the vast cosmic ocean, tracing our journey from ancient stargazers to modern interstellar voyagers.",
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780345331359-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: 'The Gene: An Intimate History',
+      author: 'Siddhartha Mukherjee',
+      isbn: '9781476733524',
+      category: 'Science',
+      publishYear: 2016,
+      publisher: 'Scribner',
+      quantity: 4,
+      available: 4,
+      description: 'Pulitzer Prize-winning author Siddhartha Mukherjee weaves cutting-edge science, social history, and deeply personal family memoir to tell the epic story of the fundamental unit of heredity. From Aristotle and Mendel to CRISPR gene editing, this book examines human identity and what the future of genetics holds for humankind.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9781476733524-L.jpg',
+      addedDate: today(),
+    },
+
+    // ── 3. Children's Book ───────────────────────────────────
+    {
+      id: uid(),
+      title: 'The Little Prince',
+      author: 'Antoine de Saint-Exupéry',
+      isbn: '9780156012195',
+      category: "Children's Book",
+      publishYear: 1943,
+      publisher: 'Harcourt, Inc.',
+      quantity: 5,
+      available: 5,
+      description: 'After an aviator crashes his plane in the Sahara Desert, he encounters a mysterious golden-haired boy from Asteroid B-612 who shares whimsical yet profound tales of his interplanetary travels. A poetic fable celebrating love, loneliness, imagination, and the eternal truth that what is essential is invisible to the eye.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780156012195-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: 'Where the Wild Things Are',
+      author: 'Maurice Sendak',
+      isbn: '9780060254926',
+      category: "Children's Book",
+      publishYear: 1963,
+      publisher: 'Harper & Row',
+      quantity: 4,
+      available: 4,
+      description: 'When mischievous young Max dresses in his wolf suit and causes havoc, he is sent to his bedroom without supper. Suddenly, his room transforms into a moonlit forest and wild ocean that carries him to the island of ferocious Wild Things, where he is crowned king of all wild things.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780060254926-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: "Charlotte's Web",
+      author: 'E.B. White',
+      isbn: '9780061124952',
+      category: "Children's Book",
+      publishYear: 1952,
+      publisher: 'Harper & Brothers',
+      quantity: 5,
+      available: 4,
+      description: 'On the Zuckerman farm, a vulnerable little pig named Wilbur is saved from impending slaughter by a remarkably wise and compassionate gray spider named Charlotte. By weaving miraculous praising words into her delicate webs, Charlotte proves how friendship, selflessness, and empathy can change the world.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780061124952-L.jpg',
+      addedDate: today(),
+    },
+
+    // ── 4. Academic (Nepal) ──────────────────────────────────
+    {
+      id: uid(),
+      title: 'A History of Nepal',
+      author: 'John Whelpton',
+      isbn: '9780521804707',
+      category: 'Academic (Nepal)',
+      publishYear: 2005,
+      publisher: 'Cambridge University Press',
+      quantity: 6,
+      available: 6,
+      description: 'An authoritative academic history of Nepal from the unification under King Prithvi Narayan Shah in the late eighteenth century through the Rana autocracy, the democratic experiments of the 1950s, the Panchayat system, the 1990 popular movement, and the Maoist armed conflict to contemporary constitutional transitions.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780521804707-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: 'The Nepal Nexus',
+      author: 'Sudheer Sharma',
+      isbn: '9789388754590',
+      category: 'Academic (Nepal)',
+      publishYear: 2019,
+      publisher: 'Penguin Viking',
+      quantity: 5,
+      available: 5,
+      description: 'Renowned journalist Sudheer Sharma provides an incisive investigative analysis into modern Nepal’s turbulent political history—unraveling the royal palace massacre, the decade-long Maoist insurgency, the abolition of the 240-year-old Shah monarchy, and the complex geopolitical tug-of-war between India and China.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9789388754590-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: 'Battles of the New Republic: A Contemporary History of Nepal',
+      author: 'Prashant Jha',
+      isbn: '9789383064786',
+      category: 'Academic (Nepal)',
+      publishYear: 2014,
+      publisher: 'Aleph Book Company',
+      quantity: 4,
+      available: 4,
+      description: 'An exhaustive first-hand analytical account of Nepal’s historic transformation from a Hindu kingdom to a federal democratic republic. Prashant Jha explores the comprehensive peace accord, the drafting of the federal constitution, the rise of regional Madhesh movements, and the enduring quest for identity.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9789383064786-L.jpg',
+      addedDate: today(),
+    },
+
+    // ── 5. Programming ───────────────────────────────────────
+    {
+      id: uid(),
+      title: 'Clean Code: A Handbook of Agile Software Craftsmanship',
+      author: 'Robert C. Martin',
+      isbn: '9780132350884',
+      category: 'Programming',
+      publishYear: 2008,
+      publisher: 'Prentice Hall',
+      quantity: 6,
+      available: 6,
+      description: 'Software legend Robert C. Martin ("Uncle Bob") presents a revolutionary handbook for writing clean, readable, and robust software. Packed with real-world refactoring case studies, smell detection, and heuristic design rules, this book transforms good programmers into true software craftsmen.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780132350884-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: 'The Pragmatic Programmer: Your Journey to Mastery',
+      author: 'David Thomas, Andrew Hunt',
+      isbn: '9780135957059',
+      category: 'Programming',
+      publishYear: 2019,
+      publisher: 'Addison-Wesley Professional',
+      quantity: 5,
+      available: 5,
+      description: 'Covering topics from personal code stewardship and career mastery to architectural decoupling, test-driven agility, and continuous automation, this anniversary edition arms modern software engineers with timeless practices to build resilient, maintainable, and delight-inducing systems.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780135957059-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: 'JavaScript: The Good Parts',
+      author: 'Douglas Crockford',
+      isbn: '9780596517748',
+      category: 'Programming',
+      publishYear: 2008,
+      publisher: "O'Reilly Media",
+      quantity: 4,
+      available: 4,
+      description: 'Douglas Crockford unearths the elegant, expressive, and truly beautiful core of JavaScript hidden beneath decades of accumulated bad design quirks. A masterclass exploring prototype inheritance, first-class functions, closures, dynamic objects, arrays, and regular expressions.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780596517748-L.jpg',
+      addedDate: today(),
+    },
+
+    // ── 6. Biography ─────────────────────────────────────────
+    {
+      id: uid(),
+      title: 'Steve Jobs',
+      author: 'Walter Isaacson',
+      isbn: '9781451648539',
+      category: 'Biography',
+      publishYear: 2011,
+      publisher: 'Simon & Schuster',
+      quantity: 5,
+      available: 5,
+      description: 'Based on more than forty exclusive interviews with Steve Jobs conducted over two years, Walter Isaacson crafts a gripping, unvarnished biography of the visionary pioneer whose intense perfectionism and fiery drive revolutionized computers, animated movies, music, smartphones, and tablet computing.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9781451648539-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: 'Long Walk to Freedom',
+      author: 'Nelson Mandela',
+      isbn: '9780316548182',
+      category: 'Biography',
+      publishYear: 1994,
+      publisher: 'Little, Brown and Company',
+      quantity: 4,
+      available: 4,
+      description: 'The profoundly moving autobiography of Nelson Mandela, one of the greatest moral leaders in human history. Mandela chronicles his upbringing in rural Transkei, his anti-apartheid leadership in the ANC, twenty-seven arduous years of imprisonment on Robben Island, and the triumphant birth of a democratic South Africa.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780316548182-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: 'Einstein: His Life and Universe',
+      author: 'Walter Isaacson',
+      isbn: '9780743264730',
+      category: 'Biography',
+      publishYear: 2007,
+      publisher: 'Simon & Schuster',
+      quantity: 4,
+      available: 4,
+      description: "Drawing upon newly released personal correspondences, Walter Isaacson explores how an imaginative, insolent patent clerk revolutionized physics. Isaacson connects Einstein's scientific brilliance with his fierce individuality, non-conformist spirit, philosophical curiosity, and humanitarian principles.",
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780743264730-L.jpg',
+      addedDate: today(),
+    },
+
+    // ── 7. Business ──────────────────────────────────────────
+    {
+      id: uid(),
+      title: 'Good to Great',
+      author: 'Jim Collins',
+      isbn: '9780066620992',
+      category: 'Business',
+      publishYear: 2001,
+      publisher: 'HarperBusiness',
+      quantity: 5,
+      available: 5,
+      description: 'Backed by five years of rigorous empirical research comparing elite companies with mediocre peers, Jim Collins identifies the key management principles—such as Level 5 Leadership, First Who Then What, the Hedgehog Concept, and the Flywheel Effect—that allow companies to make the leap to enduring greatness.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780066620992-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: 'Zero to One: Notes on Startups',
+      author: 'Peter Thiel, Blake Masters',
+      isbn: '9780804139298',
+      category: 'Business',
+      publishYear: 2014,
+      publisher: 'Crown Business',
+      quantity: 5,
+      available: 5,
+      description: 'Legendary entrepreneur and venture capitalist Peter Thiel presents an optimistic, contrarian playbook for founding transformative companies. Thiel argues that true technological progress occurs when entrepreneurs create singular, groundbreaking innovations that move the world from 0 to 1.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780804139298-L.jpg',
+      addedDate: today(),
+    },
+    {
+      id: uid(),
+      title: 'The Lean Startup',
+      author: 'Eric Ries',
+      isbn: '9780307887894',
+      category: 'Business',
+      publishYear: 2011,
+      publisher: 'Crown Currency',
+      quantity: 6,
+      available: 6,
+      description: 'Eric Ries provides a scientific, hypothesis-driven methodology for building startups and launching successful products in environments of extreme uncertainty. Introducing foundational concepts like Build-Measure-Learn feedback loops, Minimum Viable Products (MVPs), and agile pivoting, this book revolutionized modern entrepreneurship.',
+      coverImage: 'https://covers.openlibrary.org/b/isbn/9780307887894-L.jpg',
+      addedDate: today(),
+    },
   ];
+
+  // Auto-reseed detection: if books are fewer than 21 or missing cover images
+  const needsReseed =
+    !data.books ||
+    data.books.length < 21 ||
+    data.books.some((b) => !b.coverImage || !b.category);
+
+  if (needsReseed) {
+    data.books = sampleBooks;
+  }
 
   const adminMember = {
     id: uid(),
@@ -169,47 +469,61 @@ const seedSampleData = () => {
     active: true,
   });
 
-  const sampleMembers = [
-    adminMember,
-    baseMember('Alice Johnson', 'alice@gmail.com', '9841234567', 'user', 365),
-    baseMember('Bob Smith', 'bob@outlook.com', '9851234567', 'user', 180),
-    baseMember('Carol Davis', 'carol@gmail.com', '9861234567', 'user', -5),
-  ];
+  if (!data.members || data.members.length <= 1) {
+    const sampleMembers = [
+      adminMember,
+      baseMember('Alice Johnson', 'alice@gmail.com', '9841234567', 'user', 365),
+      baseMember('Bob Smith', 'bob@outlook.com', '9851234567', 'user', 180),
+      baseMember('Carol Davis', 'carol@gmail.com', '9861234567', 'user', -5),
+    ];
 
-  let existingIds = sampleMembers.map((m) => m.membershipId).filter(Boolean);
-  sampleMembers.forEach((m) => {
-    if (!m.membershipId) {
-      m.membershipId = generateMembershipId(existingIds);
-      existingIds.push(m.membershipId);
-    }
-  });
+    let existingIds = sampleMembers.map((m) => m.membershipId).filter(Boolean);
+    sampleMembers.forEach((m) => {
+      if (!m.membershipId) {
+        m.membershipId = generateMembershipId(existingIds);
+        existingIds.push(m.membershipId);
+      }
+    });
+    data.members = sampleMembers;
+  }
 
-  const sampleBorrows = [
-    { id: uid(), bookId: sampleBooks[1].id, memberId: sampleMembers[1].id,
-      borrowDate: daysFromNow(-20), dueDate: daysFromNow(-6),
-      returnDate: null, status: 'borrowed', fine: 0, lost: false },
-    { id: uid(), bookId: sampleBooks[3].id, memberId: sampleMembers[2].id,
-      borrowDate: daysFromNow(-8), dueDate: daysFromNow(6),
-      returnDate: null, status: 'borrowed', fine: 0, lost: false },
-  ];
+  if (!data.borrows || data.borrows.length === 0) {
+    const sampleBorrows = [
+      {
+        id: uid(),
+        bookId: data.books[1]?.id || uid(),
+        memberId: data.members[1]?.id || uid(),
+        borrowDate: daysFromNow(-20),
+        dueDate: daysFromNow(-6),
+        returnDate: null,
+        status: 'borrowed',
+        fine: 0,
+        borrowFee: 50,
+        lost: false,
+      },
+      {
+        id: uid(),
+        bookId: data.books[8]?.id || uid(),
+        memberId: data.members[2]?.id || uid(),
+        borrowDate: daysFromNow(-8),
+        dueDate: daysFromNow(6),
+        returnDate: null,
+        status: 'borrowed',
+        fine: 0,
+        borrowFee: 50,
+        lost: false,
+      },
+    ];
+    data.borrows = sampleBorrows;
+  }
 
-  const bookMap = {};
-  sampleBooks.forEach((b) => (bookMap[b.id] = b));
-  sampleBorrows.forEach((br) => {
-    if (br.status === 'borrowed' && bookMap[br.bookId]) {
-      bookMap[br.bookId].available -= 1;
-    }
-  });
-
-  const newData = {
-    books: sampleBooks,
-    members: sampleMembers,
-    borrows: sampleBorrows,
-    reservations: [],
-    notifications: [],
-    settings: { ...DEFAULT_SETTINGS },
+  // Ensure settings are properly migrated
+  data.settings = {
+    ...DEFAULT_SETTINGS,
+    ...(data.settings || {}),
   };
-  saveData(newData);
+
+  saveData(data);
 };
 
 // ── Context ─────────────────────────────────────────────────
@@ -474,6 +788,8 @@ export const DataProvider = ({ children }) => {
       return;
     }
 
+    const fee = getBorrowFee(book, d.settings);
+
     const reservation = (d.reservations || []).find(
       (r) => r.bookId === borrow.bookId &&
              r.memberId === borrow.memberId &&
@@ -492,13 +808,17 @@ export const DataProvider = ({ children }) => {
       returnDate: null,
       status: 'borrowed',
       fine: 0,
+      borrowFee: fee,
       lost: false,
     }];
     d.books = d.books.map((bk) =>
       bk.id === borrow.bookId ? { ...bk, available: bk.available - 1 } : bk
     );
     update(d);
-    pushNotification({ type: 'success', message: `Book issued to ${member.name}.` });
+    pushNotification({
+      type: 'success',
+      message: `Book "${book.title}" issued to ${member.name}. Borrow fee: ${d.settings.currency} ${fee.toFixed(2)}`,
+    });
   }, [update, pushNotification]);
 
   const returnBorrow = useCallback((borrowId) => {
@@ -615,14 +935,14 @@ export const DataProvider = ({ children }) => {
       bookingDate: today(),
       pickupDate: pickup,
       expiresAt: daysFromNow(d.settings.reservationHoldDays || 3),
-      fee: Number(d.settings.reservationFee || 0),
+      fee: 0, // Free reservation hold
       status: 'pending',
     };
     d.reservations.push(reservation);
     update(d);
     pushNotification({
       type: 'success',
-      message: `Reserved for pickup on ${formatDate(pickup)}. Fee: ${d.settings.currency} ${reservation.fee.toFixed(2)}`,
+      message: `Reserved for pickup on ${formatDate(pickup)}. Hold valid for ${d.settings.reservationHoldDays || 3} days.`,
     });
     return { ok: true, success: true, reservation };
   }, [update, pushNotification]);
@@ -647,6 +967,7 @@ export const DataProvider = ({ children }) => {
     }
     d.reservations = d.reservations.map((r) => r.id === id ? { ...r, status: 'fulfilled' } : r);
     const dueDate = daysFromNow(14);
+    const fee = getBorrowFee(book, d.settings);
     d.borrows = [...d.borrows, {
       id: uid(),
       bookId: res.bookId,
@@ -656,11 +977,15 @@ export const DataProvider = ({ children }) => {
       returnDate: null,
       status: 'borrowed',
       fine: 0,
+      borrowFee: fee,
       lost: false,
     }];
     d.books = d.books.map((b) => b.id === res.bookId ? { ...b, available: b.available - 1 } : b);
     update(d);
-    pushNotification({ type: 'success', message: 'Reservation approved and book issued.' });
+    pushNotification({
+      type: 'success',
+      message: `Reservation approved and book issued. Borrow fee: ${d.settings.currency} ${fee.toFixed(2)}`,
+    });
   }, [update, pushNotification]);
 
   // Backward-compatible aliases
@@ -720,6 +1045,7 @@ export const DataProvider = ({ children }) => {
     updateSettings,
     // Derived
     getMemberFines,
+    getBorrowFee,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

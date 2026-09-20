@@ -127,40 +127,70 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Reservation settings */}
+      {/* Borrow Fee Settings */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
+          <i className="fas fa-money-bill-wave text-emerald-600" />
+          Book Borrow Fees by Category
+        </h3>
+        <p className="text-xs text-slate-500 mb-4">
+          Charged when a book is issued to a member. Academic books from Nepal have a discounted fee.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+              Standard Borrow Fee ({form.currency})
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={form.borrowFee ?? 50}
+              onChange={(e) => setForm({ ...form, borrowFee: Number(e.target.value) || 0 })}
+              className="w-full border rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 font-semibold text-slate-800"
+            />
+            <span className="text-[11px] text-slate-400 mt-1 block">Applied to Fiction, Science, Programming, etc.</span>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+              Academic (Nepal) Borrow Fee ({form.currency})
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={form.borrowFeeAcademic ?? 10}
+              onChange={(e) => setForm({ ...form, borrowFeeAcademic: Number(e.target.value) || 0 })}
+              className="w-full border rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 font-semibold text-emerald-700"
+            />
+            <span className="text-[11px] text-slate-400 mt-1 block">Special student rate for Academic (Nepal) books</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Reservation Settings (Free Holds) */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
         <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
           <i className="fas fa-bookmark text-blue-600" />
           Book Reservations & Booking Holds
         </h3>
         <p className="text-xs text-slate-500 mb-4">
-          Controls how book reservations are charged and held before automatic expiry.
+          Reservations are free holds. Books are held for members until the specified hold period expires.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-              Reservation Fee ({form.currency})
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={form.reservationFee}
-              onChange={(e) => setForm({ ...form, reservationFee: Number(e.target.value) || 0 })}
-              className="w-full border rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-              Hold Period (Days)
+              Hold Period After Pickup Date (Days)
             </label>
             <input
               type="number"
               min="1"
-              value={form.reservationHoldDays}
+              value={form.reservationHoldDays || 3}
               onChange={(e) => setForm({ ...form, reservationHoldDays: Number(e.target.value) || 1 })}
               className="w-full border rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
+            <span className="text-[11px] text-slate-400 mt-1 block">Days a reserved book is kept before auto-release</span>
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
@@ -169,10 +199,11 @@ export default function Settings() {
             <input
               type="number"
               min="1"
-              value={form.maxReservationsPerUser}
+              value={form.maxReservationsPerUser || 3}
               onChange={(e) => setForm({ ...form, maxReservationsPerUser: Number(e.target.value) || 1 })}
               className="w-full border rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
+            <span className="text-[11px] text-slate-400 mt-1 block">Maximum concurrent pending reservations per user</span>
           </div>
         </div>
       </div>

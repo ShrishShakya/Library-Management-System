@@ -86,7 +86,7 @@ export default function BookDetailModal({ book, onClose, onReserve }) {
           {/* Book Metadata */}
           <section>
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <i className="fas fa-circle-info text-blue-500" /> Book Information
+              <i className="fas fa-circle-info text-blue-500" /> Book Information & Borrow Fee
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
@@ -98,12 +98,14 @@ export default function BookDetailModal({ book, onClose, onReserve }) {
                 <p className="text-slate-800 font-semibold">{book.publishYear || '—'}</p>
               </div>
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                <p className="text-slate-400 text-xs">Total Inventory</p>
-                <p className="text-slate-800 font-semibold">{book.quantity} copies</p>
+                <p className="text-slate-400 text-xs">Borrow Fee</p>
+                <p className="text-blue-700 font-bold">
+                  {book.category === 'Academic (Nepal)' ? `${data.settings?.currency || 'NRs.'} 10.00 (Academic)` : `${data.settings?.currency || 'NRs.'} 50.00`}
+                </p>
               </div>
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                <p className="text-slate-400 text-xs">Currently Issued</p>
-                <p className="text-slate-800 font-semibold">{activeBorrows.length} copies</p>
+                <p className="text-slate-400 text-xs">Inventory (Avail/Total)</p>
+                <p className="text-slate-800 font-semibold">{book.available} / {book.quantity} copies</p>
               </div>
             </div>
           </section>
@@ -122,7 +124,7 @@ export default function BookDetailModal({ book, onClose, onReserve }) {
                     <div key={b.id} className="flex items-center justify-between text-sm bg-slate-50 rounded-xl p-3 border border-slate-200">
                       <div>
                         <p className="font-semibold text-slate-800">{m?.name || 'Unknown Member'}</p>
-                        <p className="text-xs text-slate-400 font-mono">{m?.membershipId || m?.email}</p>
+                        <p className="text-xs text-slate-400">{m?.email}</p>
                       </div>
                       <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
                         overdue ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
@@ -148,7 +150,7 @@ export default function BookDetailModal({ book, onClose, onReserve }) {
                   return (
                     <div key={r.id} className="flex items-center justify-between bg-slate-50 rounded-xl p-2.5 px-3.5 border border-slate-200 text-xs">
                       <span className="font-semibold text-slate-700">
-                        {m?.name || 'Unknown'} <span className="font-mono text-slate-400">({m?.membershipId || ''})</span>
+                        {m?.name || 'Unknown'} <span className="text-slate-400 font-normal">({m?.email || ''})</span>
                       </span>
                       <span className="text-slate-500">
                         Pickup by <strong>{formatDate(r.pickupDate || r.expiresAt)}</strong>

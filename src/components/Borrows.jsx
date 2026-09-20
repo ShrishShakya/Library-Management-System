@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useData } from '../hooks/useData';
 import {
   calculateOverdueFine, formatCurrency, formatDate, isOverdue,
-  isMembershipExpired, daysBetween, today,
+  isMembershipExpired, daysBetween, today, getBorrowFee,
 } from '../utils/helpers';
 import Modal from './Modal';
 import BookDetailModal from './BookDetailModal';
@@ -109,11 +109,12 @@ export default function Borrows() {
               <thead className="bg-slate-50 text-slate-500 border-b text-xs">
                 <tr>
                   <th className="px-4 py-3 text-left">Book Title (Click for details)</th>
-                  <th className="px-4 py-3 text-left">Member & ID</th>
+                  <th className="px-4 py-3 text-left">Member</th>
                   <th className="px-4 py-3 text-left">Borrowed Date</th>
                   <th className="px-4 py-3 text-left">Due Date</th>
+                  <th className="px-4 py-3 text-left">Borrow Fee</th>
                   <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-left">Overdue Fine / Fee</th>
+                  <th className="px-4 py-3 text-left">Overdue Fine</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -122,6 +123,7 @@ export default function Borrows() {
                   const overdue = br.status === 'borrowed' && isOverdue(br.dueDate);
                   const book = getBook(br.bookId);
                   const member = getMember(br.memberId);
+                  const fee = br.borrowFee != null ? br.borrowFee : getBorrowFee(book, settings);
 
                   return (
                     <tr key={br.id} className="hover:bg-slate-50/80 transition-colors">
@@ -138,13 +140,17 @@ export default function Borrows() {
 
                       <td className="px-4 py-3">
                         <div className="text-slate-800 font-semibold">{getMemberName(br.memberId)}</div>
-                        <div className="text-[11px] font-mono text-slate-400 font-medium">
-                          {member?.membershipId || member?.email || '—'}
+                        <div className="text-[11px] text-slate-400 font-medium">
+                          {member?.email || '—'}
                         </div>
                       </td>
 
                       <td className="px-4 py-3 text-slate-400 text-xs">{formatDate(br.borrowDate)}</td>
                       <td className="px-4 py-3 text-xs font-medium text-slate-700">{formatDate(br.dueDate)}</td>
+
+                      <td className="px-4 py-3 text-xs font-semibold text-slate-800">
+                        {formatCurrency(fee, settings?.currency)}
+                      </td>
 
                       <td className="px-4 py-3">
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
@@ -226,7 +232,7 @@ export default function Borrows() {
             >
               {availableBooks.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.title} ({b.available} copies available)
+                  {b.title} ({b.available} available) — {b.category}
                 </option>
               ))}
             </select>
@@ -244,12 +250,30 @@ export default function Borrows() {
                 const daysLeft = m.membershipExpiryDate ? daysBetween(today(), m.membershipExpiryDate) : 0;
                 return (
                   <option key={m.id} value={m.id}>
-                    {m.name} ({m.membershipId || m.email}) — {m.role === 'admin' ? 'Admin' : expired ? 'EXPIRED' : `Active (${daysLeft}d left)`}
+                    {m.name} ({m.email}) — {m.role === 'admin' ? 'Admin' : expired ? 'EXPIRED' : `Active (${daysLeft}d left)`}
                   </option>
                 );
               })}
             </select>
           </div>
+
+          {/* Dynamic Borrow Fee display */}
+          {form.bookId && (() => {
+            const selectedBook = books.find((b) => b.id === form.bookId);
+            const fee = getBorrowFee(selectedBook, settings);
+            const isAcademic = selectedBook?.category === 'Academic (Nepal)';
+            return (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-950">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600 font-semibold">Borrow Fee:</span>
+                  <span className="font-bold text-blue-900 text-sm">{formatCurrency(fee, settings?.currency)}</span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {isAcademic ? 'Academic rate (discounted)' : 'Standard book borrow fee'}
+                </p>
+              </div>
+            );
+          })()}
 
           {selectedMemberExpired && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-xs">
