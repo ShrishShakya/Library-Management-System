@@ -6,12 +6,14 @@ import {
   isMembershipExpired, daysBetween, today,
 } from '../utils/helpers';
 import Modal from './Modal';
+import BookDetailModal from './BookDetailModal';
 
 export default function Borrows() {
   const { data, addBorrow, returnBorrow, markLost, deleteBorrow } = useData();
   const { books = [], members = [], borrows = [], settings } = data;
   const location = useLocation();
   const [modalOpen, setModalOpen] = useState(false);
+  const [detailBook, setDetailBook] = useState(null);
   const [form, setForm] = useState({ bookId: '', memberId: '', dueDays: 14 });
   const [activeOnly, setActiveOnly] = useState(true);
 
@@ -33,8 +35,10 @@ export default function Borrows() {
     return list;
   }, [borrows, activeOnly]);
 
-  const getBookTitle = (id) => books.find((b) => b.id === id)?.title || 'Unknown';
-  const getMemberName = (id) => members.find((m) => m.id === id)?.name || 'Unknown';
+  const getBook = (id) => books.find((b) => b.id === id);
+  const getBookTitle = (id) => getBook(id)?.title || 'Unknown';
+  const getMember = (id) => members.find((m) => m.id === id);
+  const getMemberName = (id) => getMember(id)?.name || 'Unknown';
 
   const selectedMember = members.find((m) => m.id === form.memberId);
   const selectedMemberExpired = selectedMember && selectedMember.role !== 'admin' && isMembershipExpired(selectedMember.membershipExpiryDate);
@@ -104,8 +108,8 @@ export default function Borrows() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500 border-b text-xs">
                 <tr>
-                  <th className="px-4 py-3 text-left">Book Title</th>
-                  <th className="px-4 py-3 text-left">Member</th>
+                  <th className="px-4 py-3 text-left">Book Title (Click for details)</th>
+                  <th className="px-4 py-3 text-left">Member & ID</th>
                   <th className="px-4 py-3 text-left">Borrowed Date</th>
                   <th className="px-4 py-3 text-left">Due Date</th>
                   <th className="px-4 py-3 text-left">Status</th>
@@ -116,14 +120,32 @@ export default function Borrows() {
               <tbody className="divide-y divide-slate-100">
                 {filteredBorrows.map((br) => {
                   const overdue = br.status === 'borrowed' && isOverdue(br.dueDate);
+                  const book = getBook(br.bookId);
+                  const member = getMember(br.memberId);
+
                   return (
                     <tr key={br.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-4 py-3 max-w-[180px] truncate font-semibold text-slate-800" title={getBookTitle(br.bookId)}>
-                        {getBookTitle(br.bookId)}
+                      <td className="px-4 py-3 max-w-[180px]">
+                        <button
+                          onClick={() => book && setDetailBook(book)}
+                          className="font-semibold text-slate-800 hover:text-blue-600 transition text-left truncate block"
+                          title="Click to view book"
+                        >
+                          {getBookTitle(br.bookId)}
+                        </button>
+                        <span className="text-[11px] text-slate-400 font-normal">by {book?.author || '—'}</span>
                       </td>
-                      <td className="px-4 py-3 text-slate-700 font-medium">{getMemberName(br.memberId)}</td>
+
+                      <td className="px-4 py-3">
+                        <div className="text-slate-800 font-semibold">{getMemberName(br.memberId)}</div>
+                        <div className="text-[11px] font-mono text-slate-400 font-medium">
+                          {member?.membershipId || member?.email || '—'}
+                        </div>
+                      </td>
+
                       <td className="px-4 py-3 text-slate-400 text-xs">{formatDate(br.borrowDate)}</td>
                       <td className="px-4 py-3 text-xs font-medium text-slate-700">{formatDate(br.dueDate)}</td>
+
                       <td className="px-4 py-3">
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                           br.status === 'lost'
@@ -135,6 +157,7 @@ export default function Borrows() {
                           {br.status === 'lost' ? 'Lost Book' : br.status === 'borrowed' ? (overdue ? 'Overdue' : 'Borrowed') : 'Returned'}
                         </span>
                       </td>
+
                       <td className="px-4 py-3 text-xs">
                         {(() => {
                           if (br.status === 'lost') {
@@ -150,6 +173,7 @@ export default function Borrows() {
                           return <span className="text-slate-400">—</span>;
                         })()}
                       </td>
+
                       <td className="px-4 py-3 text-right space-x-1.5">
                         {br.status === 'borrowed' && (
                           <>
@@ -263,6 +287,14 @@ export default function Borrows() {
           </button>
         </div>
       </Modal>
+
+      {/* Book Detail Modal */}
+      {detailBook && (
+        <BookDetailModal
+          book={detailBook}
+          onClose={() => setDetailBook(null)}
+        />
+      )}
     </div>
   );
 }

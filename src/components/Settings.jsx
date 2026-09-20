@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../hooks/useData';
+import { MAX_FINE_AMOUNT } from '../utils/helpers';
 
 export default function Settings() {
   const { data, updateSettings } = useData();
@@ -41,6 +42,15 @@ export default function Settings() {
         <p className="text-xs text-slate-500 mt-0.5">
           Configure currency, membership validation, reservation rules, and fine structures.
         </p>
+      </div>
+
+      {/* Global Cap Notice */}
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 flex items-start gap-3 shadow-sm">
+        <i className="fas fa-shield-halved text-amber-600 text-base mt-0.5" />
+        <div>
+          <strong className="block text-sm mb-0.5 text-amber-950 font-bold">Global Fine Safety Limit (Cap)</strong>
+          <span>All computed fines (overdue penalties, lost book charges, and administrative fees) are automatically capped at a maximum of <strong>{form.currency} {MAX_FINE_AMOUNT}</strong> per transaction to protect members.</span>
+        </div>
       </div>
 
       {/* Currency & Localization */}
@@ -182,7 +192,7 @@ export default function Settings() {
           </button>
         </div>
         <p className="text-xs text-slate-500 mb-4">
-          Overdue fines scale automatically based on how many days a borrowed book is past due.
+          Overdue fines scale automatically based on days overdue (subject to {form.currency} {MAX_FINE_AMOUNT} maximum cap).
         </p>
 
         <div className="space-y-2.5">

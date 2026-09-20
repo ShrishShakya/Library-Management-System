@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useData } from '../hooks/useData';
 import { formatDate, isMembershipExpired, isMembershipExpiringSoon, daysBetween, today } from '../utils/helpers';
 import QuickActions from './QuickActions';
+import BookDetailModal from './BookDetailModal';
 
 export default function Dashboard() {
   const { data, renewMember } = useData();
@@ -10,6 +11,7 @@ export default function Dashboard() {
 
   const [userTab, setUserTab] = useState('all'); // 'all' | 'admins' | 'members' | 'expired'
   const [userSearch, setUserSearch] = useState('');
+  const [detailBook, setDetailBook] = useState(null);
 
   const activeBorrows = borrows.filter((b) => b.status === 'borrowed');
   const overdueBorrows = activeBorrows.filter((b) => b.dueDate < today());
@@ -34,7 +36,6 @@ export default function Dashboard() {
     [books]
   );
 
-  // Filter users by tab & search
   const filteredUsers = useMemo(() => {
     let list = members;
     if (userTab === 'admins') list = list.filter((m) => m.role === 'admin');
@@ -97,7 +98,7 @@ export default function Dashboard() {
               <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
               <input
                 type="text"
-                placeholder="Search user..."
+                placeholder="Search user or ID..."
                 className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 w-40"
                 value={userSearch}
                 onChange={(e) => setUserSearch(e.target.value)}
@@ -163,7 +164,7 @@ export default function Dashboard() {
                           </div>
                           <div>
                             <span className="font-semibold text-slate-800 block text-sm">{u.name}</span>
-                            <span className="text-[11px] font-mono text-slate-400">{u.membershipId || '—'}</span>
+                            <span className="text-[11px] font-mono text-slate-400 font-semibold">{u.membershipId || '—'}</span>
                           </div>
                         </div>
                       </td>
@@ -272,7 +273,11 @@ export default function Dashboard() {
                 {recentBooks.map((b) => (
                   <tr key={b.id} className="border-b last:border-0 hover:bg-slate-50">
                     <td className="py-2.5 px-3">
-                      <div className="w-8 h-10 bg-slate-100 rounded flex items-center justify-center overflow-hidden border border-slate-200">
+                      <div
+                        onClick={() => setDetailBook(b)}
+                        className="w-8 h-10 bg-slate-100 rounded flex items-center justify-center overflow-hidden border border-slate-200 cursor-pointer hover:opacity-80 transition"
+                        title="Click to view details"
+                      >
                         {b.coverImage ? (
                           <img src={b.coverImage} alt={b.title} className="w-full h-full object-cover" />
                         ) : (
@@ -281,7 +286,13 @@ export default function Dashboard() {
                       </div>
                     </td>
                     <td className="py-2.5 px-3 font-medium text-slate-900">
-                      <span>{b.title}</span>
+                      <button
+                        onClick={() => setDetailBook(b)}
+                        className="font-semibold text-slate-800 hover:text-blue-600 transition text-left"
+                        title="Click to view details"
+                      >
+                        {b.title}
+                      </button>
                       <span className="block text-[11px] text-slate-400 font-normal">ISBN: {b.isbn || '—'}</span>
                     </td>
                     <td className="px-3 text-slate-700 text-xs">{b.author}</td>
@@ -304,6 +315,14 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Book Detail Modal */}
+      {detailBook && (
+        <BookDetailModal
+          book={detailBook}
+          onClose={() => setDetailBook(null)}
+        />
+      )}
     </div>
   );
 }

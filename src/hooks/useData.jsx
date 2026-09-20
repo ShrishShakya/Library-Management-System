@@ -5,12 +5,14 @@ import {
   uid, today, daysFromNow, daysBetween, formatDate, formatCurrency,
   calculateOverdueFine, generateMembershipId, simpleHash, isOverdue,
   isMembershipExpired, isMembershipExpiringSoon, normalizePhone,
+  capFine, MAX_FINE_AMOUNT,
 } from '../utils/helpers';
 
 export {
   uid, today, daysFromNow, daysBetween, formatDate, formatCurrency,
   calculateOverdueFine, generateMembershipId, simpleHash, isOverdue,
   isMembershipExpired, isMembershipExpiringSoon, normalizePhone,
+  capFine, MAX_FINE_AMOUNT,
 };
 
 const DB_KEY = 'lms_data';
@@ -57,12 +59,10 @@ const loadData = () => {
         ...DEFAULT_SETTINGS,
         ...(parsed.settings || {}),
       };
-      // Migrate currency if it was '$'
       if (!settings.currency || settings.currency === '$') {
         settings.currency = 'NRs.';
       }
 
-      // Ensure all members have valid email, membershipExpiryDate and role
       const members = (parsed.members || []).map((m) => {
         let email = m.email || '';
         if (email === 'admin@library.com') email = 'admin@gmail.com';
@@ -129,19 +129,19 @@ const seedSampleData = () => {
   const sampleBooks = [
     { id: uid(), title: 'The Great Gatsby', author: 'F. Scott Fitzgerald',
       isbn: '978-0-7432-7356-5', category: 'Fiction', quantity: 4, available: 4,
-      description: 'A classic story of wealth, love, and the American dream.',
+      description: 'A classic story of wealth, love, and the American dream set in the Jazz Age on Long Island.',
       coverImage: '', addedDate: today() },
     { id: uid(), title: 'To Kill a Mockingbird', author: 'Harper Lee',
       isbn: '978-0-06-112008-4', category: 'Fiction', quantity: 3, available: 2,
-      description: 'Racial injustice and the loss of innocence in the American South.',
+      description: 'The unforgettable novel of a childhood in a sleepy Southern town and the crisis of conscience that rocked it.',
       coverImage: '', addedDate: today() },
     { id: uid(), title: '1984', author: 'George Orwell',
       isbn: '978-0-452-28423-4', category: 'Science', quantity: 5, available: 5,
-      description: 'A dystopian masterpiece about totalitarianism and mass surveillance.',
+      description: 'A dystopian masterpiece about totalitarianism, surveillance, and the eradication of truth.',
       coverImage: '', addedDate: today() },
     { id: uid(), title: 'The Hobbit', author: 'J.R.R. Tolkien',
       isbn: '978-0-547-92822-7', category: 'Fantasy', quantity: 4, available: 4,
-      description: 'Bilbo Baggins embarks on a thrilling quest to reclaim the lost kingdom.',
+      description: 'Bilbo Baggins embarks on a thrilling quest with Gandalf and thirteen dwarves to reclaim the lost kingdom of Erebor.',
       coverImage: '', addedDate: today() },
   ];
 
@@ -173,7 +173,7 @@ const seedSampleData = () => {
     adminMember,
     baseMember('Alice Johnson', 'alice@gmail.com', '9841234567', 'user', 365),
     baseMember('Bob Smith', 'bob@outlook.com', '9851234567', 'user', 180),
-    baseMember('Carol Davis', 'carol@gmail.com', '9861234567', 'user', -5), // Expired demo
+    baseMember('Carol Davis', 'carol@gmail.com', '9861234567', 'user', -5),
   ];
 
   let existingIds = sampleMembers.map((m) => m.membershipId).filter(Boolean);
@@ -229,7 +229,6 @@ export const DataProvider = ({ children }) => {
     const loaded = loadData();
     setData(loaded);
 
-    // Sync currentUser if session is active
     if (currentUser) {
       const freshUser = loaded.members.find((m) => m.id === currentUser.id);
       if (freshUser) {
@@ -251,7 +250,7 @@ export const DataProvider = ({ children }) => {
   const pushNotification = useCallback((n) => {
     const notif = {
       id: uid(),
-      type: n.type || 'info', // success | error | warning | info
+      type: n.type || 'info',
       message: n.message,
       createdAt: Date.now(),
     };
@@ -281,7 +280,6 @@ export const DataProvider = ({ children }) => {
       return { ok: false, error: 'No account found with this email address.' };
     }
 
-    // Flexible password matching: hashed match, plain text match, or standard demo defaults
     const isPasswordValid =
       user.password === simpleHash(cleanPass) ||
       user.password === cleanPass ||
@@ -296,7 +294,6 @@ export const DataProvider = ({ children }) => {
       return { ok: false, error: 'Your account is deactivated. Please contact the librarian.' };
     }
 
-    // Upgrade plain password to hashed representation
     if (user.password !== simpleHash(cleanPass)) {
       user.password = simpleHash(cleanPass);
       update(d);
@@ -314,7 +311,6 @@ export const DataProvider = ({ children }) => {
     setCurrentUser(null);
   }, []);
 
-  // Robust password reset supporting normalized phone comparison
   const resetPassword = useCallback((emailInput, phoneInput, newPassword) => {
     const d = loadData();
     const cleanEmail = (emailInput || '').trim().toLowerCase();
@@ -331,7 +327,6 @@ export const DataProvider = ({ children }) => {
     const member = d.members[idx];
     const memberPhoneNorm = normalizePhone(member.phone);
 
-    // If member has a phone on file, require normalized match
     if (memberPhoneNorm) {
       if (!cleanPhone || cleanPhone !== memberPhoneNorm) {
         return {
@@ -363,7 +358,6 @@ export const DataProvider = ({ children }) => {
     const currentExpiry = member.membershipExpiryDate;
     let baseDate = today();
 
-    // If current membership has not expired yet, extend from current expiry date
     if (currentExpiry && currentExpiry > today()) {
       baseDate = currentExpiry;
     }
@@ -457,7 +451,7 @@ export const DataProvider = ({ children }) => {
     pushNotification({ type: 'warning', message: 'Member deleted.' });
   }, [update, pushNotification]);
 
-  // ── Borrows (with membership expiry validation) ───────────
+  // ── Borrows (with fee capping) ─────────────────────────────
   const addBorrow = useCallback((borrow) => {
     const d = { ...loadData() };
     const member = d.members.find((m) => m.id === borrow.memberId);
@@ -466,7 +460,6 @@ export const DataProvider = ({ children }) => {
       return;
     }
 
-    // Check membership expiration
     if (isMembershipExpired(member.membershipExpiryDate)) {
       pushNotification({
         type: 'error',
@@ -481,7 +474,6 @@ export const DataProvider = ({ children }) => {
       return;
     }
 
-    // Auto fulfill pending reservation if any
     const reservation = (d.reservations || []).find(
       (r) => r.bookId === borrow.bookId &&
              r.memberId === borrow.memberId &&
@@ -513,7 +505,9 @@ export const DataProvider = ({ children }) => {
     const d = { ...loadData() };
     const borrow = d.borrows.find((b) => b.id === borrowId);
     if (!borrow || borrow.status === 'returned') return;
-    const fine = calculateOverdueFine(borrow.dueDate, d.settings.overdueFineTiers);
+    const rawFine = calculateOverdueFine(borrow.dueDate, d.settings.overdueFineTiers);
+    const fine = capFine(rawFine);
+
     d.borrows = d.borrows.map((b) =>
       b.id === borrowId
         ? { ...b, returnDate: today(), status: 'returned', fine }
@@ -526,18 +520,22 @@ export const DataProvider = ({ children }) => {
     pushNotification({
       type: fine > 0 ? 'warning' : 'success',
       message: fine > 0
-        ? `Book returned. Overdue fine calculated: ${d.settings.currency} ${fine.toFixed(2)}`
+        ? `Book returned. Overdue fine (capped): ${d.settings.currency} ${fine.toFixed(2)}`
         : 'Book returned on time.',
     });
   }, [update, pushNotification]);
 
+  // Mark a borrow as LOST (charges capped lost-book fine)
   const markLost = useCallback((borrowId) => {
     const d = { ...loadData() };
     const borrow = d.borrows.find((b) => b.id === borrowId);
     if (!borrow || borrow.status === 'returned') return;
-    const total =
+
+    const raw =
       Number(d.settings.lostBookFine || 0) +
       Number(d.settings.lostBookProcessingFee || 0);
+    const total = capFine(raw); // ← Rs. 1500 cap applied
+
     d.borrows = d.borrows.map((b) =>
       b.id === borrowId
         ? { ...b, status: 'lost', lost: true, fine: total, returnDate: today() }
@@ -551,7 +549,7 @@ export const DataProvider = ({ children }) => {
     update(d);
     pushNotification({
       type: 'error',
-      message: `Book marked as lost. Total charge: ${d.settings.currency} ${total.toFixed(2)}`,
+      message: `Book marked as lost. Total charge (capped): ${d.settings.currency} ${total.toFixed(2)}`,
     });
   }, [update, pushNotification]);
 
@@ -568,8 +566,8 @@ export const DataProvider = ({ children }) => {
     pushNotification({ type: 'warning', message: 'Borrow record deleted.' });
   }, [update, pushNotification]);
 
-  // ── Reservations (with membership expiry validation) ──────
-  const addReservation = useCallback((bookId, memberId) => {
+  // ── Reservations (with user-selected pickupDate max 30 days) ─
+  const addReservation = useCallback((bookId, memberId, pickupDate) => {
     const d = { ...loadData() };
     const member = d.members.find((m) => m.id === memberId);
     if (!member) {
@@ -602,12 +600,20 @@ export const DataProvider = ({ children }) => {
       return { ok: false, error: 'Already reserved.' };
     }
 
+    // Validate user-selected pickup date (must be today or later, max 30 days ahead)
+    const todayStr = today();
+    const maxDate = daysFromNow(30);
+    let pickup = pickupDate || todayStr;
+    if (pickup < todayStr) pickup = todayStr;
+    if (pickup > maxDate) pickup = maxDate;
+
     const reservation = {
       id: uid(),
       bookId,
       memberId,
       reservedDate: today(),
       bookingDate: today(),
+      pickupDate: pickup,
       expiresAt: daysFromNow(d.settings.reservationHoldDays || 3),
       fee: Number(d.settings.reservationFee || 0),
       status: 'pending',
@@ -616,7 +622,7 @@ export const DataProvider = ({ children }) => {
     update(d);
     pushNotification({
       type: 'success',
-      message: `Reserved successfully! Fee: ${d.settings.currency} ${reservation.fee.toFixed(2)}`,
+      message: `Reserved for pickup on ${formatDate(pickup)}. Fee: ${d.settings.currency} ${reservation.fee.toFixed(2)}`,
     });
     return { ok: true, success: true, reservation };
   }, [update, pushNotification]);
@@ -658,7 +664,7 @@ export const DataProvider = ({ children }) => {
   }, [update, pushNotification]);
 
   // Backward-compatible aliases
-  const addBooking = useCallback(({ bookId, memberId }) => addReservation(bookId, memberId), [addReservation]);
+  const addBooking = useCallback(({ bookId, memberId, pickupDate }) => addReservation(bookId, memberId, pickupDate), [addReservation]);
   const cancelBooking = useCallback((id) => cancelReservation(id), [cancelReservation]);
   const approveBooking = useCallback((id) => approveReservation(id), [approveReservation]);
 
@@ -670,7 +676,7 @@ export const DataProvider = ({ children }) => {
     pushNotification({ type: 'success', message: 'Settings saved successfully.' });
   }, [update, pushNotification]);
 
-  // ── Derived helpers ───────────────────────────────────────
+  // ── Derived helpers (with fee capping) ─────────────────────
   const getMemberFines = useCallback((memberId) => {
     const d = loadData();
     let total = 0;
@@ -679,18 +685,18 @@ export const DataProvider = ({ children }) => {
       if (b.memberId !== memberId) return;
       let fine = 0;
       if (b.status === 'lost') {
-        fine = Number(b.fine || 0);
+        fine = capFine(Number(b.fine || 0));
       } else if (b.status === 'borrowed' && isOverdue(b.dueDate)) {
         fine = calculateOverdueFine(b.dueDate, d.settings.overdueFineTiers);
       } else if (b.status === 'returned') {
-        fine = Number(b.fine || 0);
+        fine = capFine(Number(b.fine || 0));
       }
       if (fine > 0) {
         items.push({ borrow: b, fine });
         total += fine;
       }
     });
-    return { total, items };
+    return { total: capFine(total), items };
   }, []);
 
   const value = {

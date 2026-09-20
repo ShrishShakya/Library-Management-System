@@ -40,6 +40,15 @@ export const formatCurrency = (n, symbol = 'NRs.') => {
   return `${s} ${(Number(n) || 0).toFixed(2)}`;
 };
 
+// ── Global fine cap ─────────────────────────────────────────
+export const MAX_FINE_AMOUNT = 1500;
+
+// Cap any computed fine at the global maximum
+export const capFine = (amount) => {
+  const n = Number(amount) || 0;
+  return Math.min(Math.max(0, n), MAX_FINE_AMOUNT);
+};
+
 // ── Phone normalization ─────────────────────────────────────
 export const normalizePhone = (p) => (p ? String(p).replace(/\D/g, '') : '');
 
@@ -56,7 +65,7 @@ export const generateMembershipId = (existingIds = []) => {
   return `${prefix}${String(next).padStart(5, '0')}`;
 };
 
-// ── Tiered overdue fine calculator ──────────────────────────
+// ── Tiered overdue fine calculator (Capped at MAX_FINE_AMOUNT) ─
 export const calculateOverdueFine = (dueDate, tiers = []) => {
   if (!dueDate) return 0;
   const overdueDays = daysBetween(dueDate, today());
@@ -67,7 +76,7 @@ export const calculateOverdueFine = (dueDate, tiers = []) => {
   for (const t of sorted) {
     if (overdueDays >= t.days) rate = t.finePerDay;
   }
-  return overdueDays * rate;
+  return capFine(overdueDays * rate);
 };
 
 // ── Password hashing ────────────────────────────────────────

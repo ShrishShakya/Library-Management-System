@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../hooks/useData';
-import { formatCurrency, formatDate, isMembershipExpired, daysBetween, today } from '../utils/helpers';
+import {
+  formatCurrency, formatDate, isMembershipExpired, daysBetween, today, daysFromNow,
+} from '../utils/helpers';
+import BookDetailModal from './BookDetailModal';
 
 export default function UserPortal() {
   const { data, currentUser, addReservation } = useData();
@@ -12,8 +15,20 @@ export default function UserPortal() {
   const [yearFilter, setYearFilter] = useState('All');
   const [activeTab, setActiveTab] = useState('all');
 
+  const [detailBook, setDetailBook] = useState(null);
+  const [reserveBook, setReserveBook] = useState(null);
+  const [pickupDate, setPickupDate] = useState(today());
+  const [error, setError] = useState('');
+
+  const minDate = today();
+  const maxDate = daysFromNow(30);
+
   const isExpired = isMembershipExpired(currentUser?.membershipExpiryDate);
   const daysLeft = currentUser?.membershipExpiryDate ? daysBetween(today(), currentUser.membershipExpiryDate) : 0;
+
+  const myActiveReservations = (reservations || []).filter(
+    (r) => r.memberId === currentUser?.id && r.status === 'pending'
+  );
 
   // Dynamic filter lists
   const categories = useMemo(() => ['All', ...Array.from(new Set(books.map((b) => b.category).filter(Boolean)))], [books]);
@@ -63,9 +78,25 @@ export default function UserPortal() {
     return list;
   }, [books, activeTab, popularBooks, recommendedBooks, search, categoryFilter, publisherFilter, yearFilter]);
 
-  const handleBookNow = (bookId) => {
-    if (!currentUser) return;
-    addReservation(bookId, currentUser.id);
+  const openReserveModal = (book) => {
+    setReserveBook(book);
+    setPickupDate(today());
+    setError('');
+  };
+
+  const closeReserveModal = () => setReserveBook(null);
+
+  const confirmReservation = () => {
+    if (!reserveBook || !currentUser) return;
+    if (pickupDate < minDate) return setError('Pickup date cannot be in the past.');
+    if (pickupDate > maxDate) return setError('Pickup date cannot be more than 30 days ahead.');
+
+    const res = addReservation(reserveBook.id, currentUser.id, pickupDate);
+    if (res.ok) {
+      closeReserveModal();
+    } else {
+      setError(res.error || 'Could not place reservation. Check limit.');
+    }
   };
 
   const isBookedByMe = (bookId) => {
@@ -75,6 +106,42 @@ export default function UserPortal() {
 
   return (
     <div className="space-y-6">
+      {/* Prominent Membership ID & Status Card */}
+      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 text-white rounded-2xl p-6 shadow-md border border-blue-400/20">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <span className="text-blue-200 text-xs font-semibold uppercase tracking-wider block">
+              Library Membership Card
+            </span>
+            <h2 className="text-2xl font-black font-mono mt-1 text-white tracking-wide">
+              {currentUser?.membershipId || 'LIB-MEMBER'}
+            </h2>
+            <p className="text-sm font-semibold text-blue-100 mt-0.5">{currentUser?.name}</p>
+          </div>
+
+          <div className="flex flex-wrap gap-6 text-sm">
+            <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-center">
+              <p className="text-blue-200 text-[11px] uppercase tracking-wide">Member Since</p>
+              <p className="font-bold text-white mt-0.5">{formatDate(currentUser?.membershipDate)}</p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-center">
+              <p className="text-blue-200 text-[11px] uppercase tracking-wide">Valid Until</p>
+              <p className={`font-bold mt-0.5 ${isExpired ? 'text-red-300' : 'text-emerald-300'}`}>
+                {formatDate(currentUser?.membershipExpiryDate)}
+              </p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-center">
+              <p className="text-blue-200 text-[11px] uppercase tracking-wide">Status</p>
+              <p className="font-bold text-white mt-0.5">
+                {isExpired ? 'EXPIRED' : `${daysLeft}d Remaining`}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Expired Membership Alert */}
       {isExpired && (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center justify-between text-red-800 animate-in fade-in">
@@ -92,41 +159,6 @@ export default function UserPortal() {
           </span>
         </div>
       )}
-
-      {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Welcome back, {currentUser?.name || 'Reader'}! 📖</h1>
-          <p className="text-blue-100 text-sm mt-1">
-            Explore our collection, search by publisher/year, or reserve your next book for {formatCurrency(settings?.reservationFee, settings?.currency)}.
-          </p>
-          <div className="mt-2 text-xs text-blue-200 font-medium flex items-center gap-2">
-            <i className="fas fa-id-card text-blue-300" />
-            <span>Membership ID: <strong className="font-mono text-white">{currentUser?.membershipId || '—'}</strong></span>
-            <span>·</span>
-            <span>
-              {isExpired ? (
-                <span className="text-red-200 font-bold">Expired on {formatDate(currentUser?.membershipExpiryDate)}</span>
-              ) : (
-                <span>Valid until <strong className="text-white">{formatDate(currentUser?.membershipExpiryDate)}</strong> ({daysLeft} days left)</span>
-              )}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl text-center">
-            <div className="text-xl font-bold">{books.filter((b) => b.available > 0).length}</div>
-            <div className="text-xs text-blue-100">Available Titles</div>
-          </div>
-          <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl text-center">
-            <div className="text-xl font-bold">
-              {(reservations || []).filter((r) => r.memberId === currentUser?.id && r.status === 'pending').length}
-            </div>
-            <div className="text-xs text-blue-100">My Reservations</div>
-          </div>
-        </div>
-      </div>
 
       {/* Tab Navigation */}
       <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
@@ -210,7 +242,8 @@ export default function UserPortal() {
             return (
               <div
                 key={book.id}
-                className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between hover:shadow-md transition-shadow relative overflow-hidden group"
+                onClick={() => setDetailBook(book)}
+                className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between hover:shadow-md hover:border-blue-300 transition relative overflow-hidden group cursor-pointer"
               >
                 {/* Visual badge */}
                 {activeTab === 'popular' && (
@@ -276,14 +309,16 @@ export default function UserPortal() {
                     <button
                       disabled
                       className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-red-50 text-red-400 border border-red-200 cursor-not-allowed"
-                      title="Please renew your membership to reserve books"
                     >
                       <i className="fas fa-ban mr-1" /> Expired
                     </button>
                   ) : (
                     <button
                       disabled={!isAvailable}
-                      onClick={() => handleBookNow(book.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openReserveModal(book);
+                      }}
                       className={`px-4 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
                         isAvailable
                           ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
@@ -298,6 +333,99 @@ export default function UserPortal() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Book Detail Modal */}
+      {detailBook && (
+        <BookDetailModal
+          book={detailBook}
+          onClose={() => setDetailBook(null)}
+          onReserve={(b) => openReserveModal(b)}
+        />
+      )}
+
+      {/* Reservation Date Picker Modal (Max 30 days) */}
+      {reserveBook && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in"
+          onClick={(e) => e.target === e.currentTarget && closeReserveModal()}
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <i className="fas fa-bookmark text-blue-600" />
+              Select Pickup Date for Reservation
+            </h3>
+
+            <div className="flex gap-3 mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <div className="w-12 h-16 bg-slate-200 rounded-lg overflow-hidden flex-shrink-0 border border-slate-200">
+                {reserveBook.coverImage ? (
+                  <img src={reserveBook.coverImage} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-slate-400">
+                    <i className="fas fa-book text-xl" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-sm text-slate-800 truncate">{reserveBook.title}</p>
+                <p className="text-xs text-slate-500">{reserveBook.author}</p>
+                <span className="text-[11px] text-emerald-600 font-semibold">{reserveBook.available} copies available</span>
+              </div>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl p-3 mb-3 flex items-center gap-2">
+                <i className="fas fa-circle-exclamation flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                  Expected Pickup Date *
+                </label>
+                <input
+                  type="date"
+                  value={pickupDate}
+                  min={minDate}
+                  max={maxDate}
+                  onChange={(e) => setPickupDate(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 font-semibold text-slate-800"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  You can choose any pickup date between <strong>today</strong> and <strong>30 days ahead</strong> ({formatDate(maxDate)}).
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs space-y-1.5 text-blue-950">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Reservation Fee:</span>
+                  <strong className="text-blue-900">{formatCurrency(settings?.reservationFee, settings?.currency)}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Hold Duration:</span>
+                  <strong className="text-blue-900">{settings?.reservationHoldDays} days after pickup date</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={closeReserveModal}
+                className="px-4 py-2 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmReservation}
+                className="px-5 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm font-bold shadow-md transition"
+              >
+                Confirm Reservation
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

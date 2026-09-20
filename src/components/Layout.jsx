@@ -62,7 +62,7 @@ export default function Layout({ children }) {
             <Link
               key={item.path}
               to={item.path}
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                 isActive(item.path)
                   ? 'bg-blue-600/20 text-blue-400 font-semibold'
                   : 'text-slate-300 hover:bg-white/5 hover:text-white'
@@ -82,7 +82,7 @@ export default function Layout({ children }) {
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-200">
           <div className="flex items-center gap-3">
             <button
-              className="md:hidden text-slate-700 text-xl p-2 rounded hover:bg-slate-200"
+              className="md:hidden text-slate-700 text-xl p-2 rounded-xl hover:bg-slate-200"
               onClick={() => setSidebarOpen(true)}
             >
               <i className="fas fa-bars" />
@@ -95,22 +95,29 @@ export default function Layout({ children }) {
 
           <div className="flex items-center gap-3">
             {currentUser && (
-              <div className="bg-white px-3.5 py-1.5 rounded-full shadow-sm border border-slate-200 flex items-center gap-2 text-xs font-medium text-slate-700">
-                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
+              <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-3 text-xs text-slate-700">
+                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
                   {currentUser.name.charAt(0)}
                 </div>
-                <span>{currentUser.name}</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold ${
-                  isAdmin ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                }`}>
-                  {isAdmin ? 'Admin' : 'Member'}
-                </span>
+                <div className="flex flex-col text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-800">{currentUser.name}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-extrabold ${
+                      isAdmin ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {isAdmin ? 'Admin' : 'Member'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-400 font-semibold">
+                    ID: {currentUser.membershipId || '—'}
+                  </span>
+                </div>
               </div>
             )}
 
             <button
               onClick={handleLogout}
-              className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+              className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
               title="Sign Out"
             >
               <i className="fas fa-right-from-bracket" />
