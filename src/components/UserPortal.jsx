@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../hooks/useData';
+import { formatCurrency } from '../utils/helpers';
 
 export default function UserPortal() {
-  const { data, currentUser, addBooking } = useData();
-  const { books, borrows, bookings = [] } = data;
+  const { data, currentUser, addReservation } = useData();
+  const { books = [], borrows = [], reservations = [], settings } = data;
 
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
@@ -11,22 +12,20 @@ export default function UserPortal() {
   const [yearFilter, setYearFilter] = useState('All');
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'available' | 'popular' | 'recommended'
 
-  const [message, setMessage] = useState(null);
-
   // Dynamic filter lists
   const categories = useMemo(() => ['All', ...Array.from(new Set(books.map(b => b.category).filter(Boolean)))], [books]);
   const publishers = useMemo(() => ['All', ...Array.from(new Set(books.map(b => b.publisher).filter(Boolean)))], [books]);
   const publishYears = useMemo(() => ['All', ...Array.from(new Set(books.map(b => b.publishYear).filter(Boolean))).sort((a, b) => b - a)], [books]);
 
-  // Compute popular/trending books based on borrow & booking counts
+  // Compute popular/trending books based on borrow & reservation counts
   const popularBooks = useMemo(() => {
     const counts = {};
     borrows.forEach(br => { counts[br.bookId] = (counts[br.bookId] || 0) + 1; });
-    bookings.forEach(bk => { counts[bk.bookId] = (counts[bk.bookId] || 0) + 1; });
+    reservations.forEach(r => { counts[r.bookId] = (counts[r.bookId] || 0) + 1; });
     return [...books].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
-  }, [books, borrows, bookings]);
+  }, [books, borrows, reservations]);
 
-  // Recommended books (e.g., top rated or high availability classics)
+  // Recommended books
   const recommendedBooks = useMemo(() => {
     return books.filter(b => b.available > 0).slice(0, 4);
   }, [books]);
@@ -65,42 +64,23 @@ export default function UserPortal() {
 
   const handleBookNow = (bookId) => {
     if (!currentUser) return;
-    const res = addBooking({ bookId, memberId: currentUser.id });
-    if (res.success) {
-      setMessage({ type: 'success', text: 'Book reserved successfully! You can view it under My Bookings.' });
-    } else {
-      setMessage({ type: 'error', text: res.error || 'Failed to reserve book.' });
-    }
-    setTimeout(() => setMessage(null), 4000);
+    addReservation(bookId, currentUser.id);
   };
 
   const isBookedByMe = (bookId) => {
     if (!currentUser) return false;
-    return bookings.some(b => b.bookId === bookId && b.memberId === currentUser.id && b.status === 'pending');
+    return reservations.some(r => r.bookId === bookId && r.memberId === currentUser.id && r.status === 'pending');
   };
 
   return (
     <div className="space-y-6">
-      {/* Alert toast notification */}
-      {message && (
-        <div className={`p-4 rounded-xl shadow-md text-sm flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-200 ${
-          message.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
-        }`}>
-          <div className="flex items-center gap-2">
-            <i className={`fas ${message.type === 'success' ? 'fa-check-circle' : 'fa-circle-exclamation'} text-lg`} />
-            <span>{message.text}</span>
-          </div>
-          <button onClick={() => setMessage(null)} className="opacity-80 hover:opacity-100">
-            <i className="fas fa-times" />
-          </button>
-        </div>
-      )}
-
       {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Welcome back, {currentUser?.name || 'Reader'}! 📖</h1>
-          <p className="text-blue-100 text-sm mt-1">Explore our collection, search by publisher/year, or reserve your next book.</p>
+          <p className="text-blue-100 text-sm mt-1">
+            Explore our collection, search by publisher/year, or reserve your next book for {formatCurrency(settings?.reservationFee, settings?.currency)}.
+          </p>
         </div>
         <div className="flex gap-2">
           <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-center">
@@ -109,7 +89,7 @@ export default function UserPortal() {
           </div>
           <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-center">
             <div className="text-xl font-bold">
-              {bookings.filter(b => b.memberId === currentUser?.id && b.status === 'pending').length}
+              {reservations.filter(r => r.memberId === currentUser?.id && r.status === 'pending').length}
             </div>
             <div className="text-xs text-blue-100">My Reservations</div>
           </div>
@@ -214,8 +194,12 @@ export default function UserPortal() {
 
                 <div>
                   <div className="flex items-start gap-3">
-                    <div className="w-12 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-sm flex items-center justify-center text-white text-xl shrink-0">
-                      <i className="fas fa-book" />
+                    <div className="w-14 h-20 bg-slate-100 rounded-lg shadow-sm flex items-center justify-center text-slate-400 text-2xl shrink-0 overflow-hidden border border-slate-200">
+                      {book.coverImage ? (
+                        <img src={book.coverImage} alt={book.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <i className="fas fa-book text-slate-300 text-xl" />
+                      )}
                     </div>
                     <div className="pr-12">
                       <span className="inline-block bg-slate-100 text-slate-600 text-[11px] font-semibold px-2 py-0.5 rounded mb-1">
@@ -235,11 +219,11 @@ export default function UserPortal() {
                   <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs text-slate-500">
                     <div>
                       <span className="block text-[10px] text-slate-400 uppercase font-semibold">Publisher</span>
-                      <span className="font-medium text-slate-700 truncate block">{book.publisher || 'N/A'}</span>
+                      <span className="font-medium text-slate-700 truncate block">{book.publisher || 'Independent'}</span>
                     </div>
                     <div>
                       <span className="block text-[10px] text-slate-400 uppercase font-semibold">Published</span>
-                      <span className="font-medium text-slate-700">{book.publishYear || 'N/A'}</span>
+                      <span className="font-medium text-slate-700">{book.publishYear || '—'}</span>
                     </div>
                   </div>
                 </div>
@@ -267,7 +251,7 @@ export default function UserPortal() {
                       }`}
                     >
                       <i className="fas fa-bookmark" />
-                      {isAvailable ? 'Book / Reserve' : 'Unavailable'}
+                      {isAvailable ? 'Reserve' : 'Unavailable'}
                     </button>
                   )}
                 </div>

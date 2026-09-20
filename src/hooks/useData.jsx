@@ -1,294 +1,567 @@
-import React, { useState, useCallback, useContext, createContext, useEffect } from 'react';
+import React, {
+  useState, useCallback, useContext, createContext, useEffect,
+} from 'react';
+import {
+  uid, today, daysFromNow, daysBetween, formatDate, formatCurrency,
+  calculateOverdueFine, generateMembershipId, simpleHash, isOverdue,
+} from '../utils/helpers';
 
-// ----- Helpers -----
-const uid = () => Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
-const today = () => new Date().toISOString().slice(0, 10);
-const daysFromNow = (n) => {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+export {
+  uid, today, daysFromNow, daysBetween, formatDate, formatCurrency,
+  calculateOverdueFine, generateMembershipId, simpleHash, isOverdue,
 };
 
 const DB_KEY = 'lms_data';
 const AUTH_KEY = 'lms_auth_user';
 
-const defaultData = { books: [], members: [], borrows: [], bookings: [] };
+// ── Default settings (admin can override) ───────────────────
+export const DEFAULT_SETTINGS = {
+  currency: '$',
+  // Reservation / booking
+  reservationFee: 2.0,
+  reservationHoldDays: 3,
+  maxReservationsPerUser: 3,
+  // Overdue fines — tiered: the more overdue, the higher the per-day rate
+  overdueFineTiers: [
+    { days: 1,  finePerDay: 0.25 },
+    { days: 7,  finePerDay: 0.5  },
+    { days: 14, finePerDay: 1.0  },
+    { days: 30, finePerDay: 2.0  },
+  ],
+  // Lost book
+  lostBookFine: 25.0,
+  lostBookProcessingFee: 5.0,
+};
 
+const defaultData = {
+  books: [],
+  members: [],
+  borrows: [],
+  reservations: [],
+  notifications: [],
+  settings: { ...DEFAULT_SETTINGS },
+};
+
+// ── Load / save ─────────────────────────────────────────────
 const loadData = () => {
   try {
     const raw = localStorage.getItem(DB_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      let members = parsed.members || [];
-
-      // Guarantee admin user exists
-      const hasAdmin = members.some(m => m.email && m.email.toLowerCase() === 'admin@library.com');
-      if (!hasAdmin) {
-        members = [
-          { id: 'admin_1', name: 'Library Admin', email: 'admin@library.com', phone: '555-0000', password: 'admin123', role: 'admin', active: true, membershipDate: '2025-01-01' },
-          ...members
-        ];
-      }
-
-      // Guarantee all members have passwords and roles
-      members = members.map(m => ({
-        ...m,
-        password: m.password || (m.email && m.email.toLowerCase() === 'admin@library.com' ? 'admin123' : 'user123'),
-        role: m.role || (m.email && m.email.toLowerCase() === 'admin@library.com' ? 'admin' : 'user')
-      }));
-
-      const fullData = { ...defaultData, ...parsed, members };
-      saveData(fullData);
-      return fullData;
+      return {
+        ...defaultData,
+        ...parsed,
+        reservations: parsed.reservations || parsed.bookings || [],
+        settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
+      };
     }
-  } catch (_) {}
+  } catch (_) { /* ignore */ }
   return { ...defaultData };
 };
 
 const saveData = (data) => localStorage.setItem(DB_KEY, JSON.stringify(data));
 
-const loadAuth = () => {
-  try {
-    const raw = localStorage.getItem(AUTH_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (_) {}
-  return null;
-};
-
-const saveAuth = (user) => {
-  if (user) localStorage.setItem(AUTH_KEY, JSON.stringify(user));
-  else localStorage.removeItem(AUTH_KEY);
-};
-
-// Seed sample data
+// ── Sample data seeding ─────────────────────────────────────
 const seedSampleData = () => {
   const data = loadData();
-  if (data.books.length > 0 || data.members.length > 0) return;
+  if (data.books.length > 0 || data.members.length > 0) {
+    // ensure admin exists
+    if (!data.members.find((m) => m.email === 'admin@library.com')) {
+      data.members.push({
+        id: uid(),
+        membershipId: 'LIB-ADMIN-00001',
+        name: 'Admin',
+        email: 'admin@library.com',
+        phone: '',
+        password: simpleHash('admin123'),
+        role: 'admin',
+        membershipDate: today(),
+        active: true,
+      });
+      saveData(data);
+    }
+    return;
+  }
+
+  const adminMember = {
+    id: uid(),
+    membershipId: 'LIB-ADMIN-00001',
+    name: 'Admin',
+    email: 'admin@library.com',
+    phone: '',
+    password: simpleHash('admin123'),
+    role: 'admin',
+    membershipDate: today(),
+    active: true,
+  };
 
   const sampleBooks = [
-    { id: uid(), title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', isbn: '978-0-7432-7356-5', category: 'Fiction', publishYear: 1925, publisher: 'Charles Scribner\'s Sons', quantity: 4, available: 4, description: 'A story of the mysteriously wealthy Jay Gatsby...', addedDate: today() },
-    { id: uid(), title: 'To Kill a Mockingbird', author: 'Harper Lee', isbn: '978-0-06-112008-4', category: 'Fiction', publishYear: 1960, publisher: 'J.B. Lippincott & Co.', quantity: 3, available: 2, description: 'Racial injustice and the loss of innocence.', addedDate: today() },
-    { id: uid(), title: '1984', author: 'George Orwell', isbn: '978-0-452-28423-4', category: 'Literature', publishYear: 1949, publisher: 'Secker & Warburg', quantity: 5, available: 5, description: 'Totalitarian society ruled by Big Brother.', addedDate: today() },
-    { id: uid(), title: 'The Catcher in the Rye', author: 'J.D. Salinger', isbn: '978-0-316-76948-0', category: 'Fiction', publishYear: 1951, publisher: 'Little, Brown and Company', quantity: 2, available: 1, description: 'Holden Caulfield and teenage rebellion.', addedDate: today() },
-    { id: uid(), title: 'Clean Code', author: 'Robert C. Martin', isbn: '978-0-132-35088-4', category: 'Programming', publishYear: 2008, publisher: 'Prentice Hall', quantity: 4, available: 4, description: 'A handbook of agile software craftsmanship.', addedDate: today() },
-    { id: uid(), title: 'Sapiens: A Brief History of Humankind', author: 'Yuval Noah Harari', isbn: '978-0-062-31609-7', category: 'History & Geography', publishYear: 2011, publisher: 'Harvill Secker', quantity: 3, available: 3, description: 'Explores the history of humanity from Homo sapiens.', addedDate: today() },
-    { id: uid(), title: 'Atomic Habits', author: 'James Clear', isbn: '978-0-735-21129-2', category: 'Self-help', publishYear: 2018, publisher: 'Penguin Random House', quantity: 5, available: 5, description: 'An easy & proven way to build good habits.', addedDate: today() },
-    { id: uid(), title: 'The Hobbit', author: 'J.R.R. Tolkien', isbn: '978-0-547-92822-7', category: 'Literature', publishYear: 1937, publisher: 'George Allen & Unwin', quantity: 4, available: 4, description: 'Bilbo Baggins embarks on an adventure.', addedDate: today() },
+    { id: uid(), title: 'The Great Gatsby', author: 'F. Scott Fitzgerald',
+      isbn: '978-0-7432-7356-5', category: 'Fiction', quantity: 4, available: 4,
+      description: 'A story of the mysteriously wealthy Jay Gatsby...',
+      coverImage: '', addedDate: today() },
+    { id: uid(), title: 'To Kill a Mockingbird', author: 'Harper Lee',
+      isbn: '978-0-06-112008-4', category: 'Fiction', quantity: 3, available: 2,
+      description: 'Racial injustice and the loss of innocence.',
+      coverImage: '', addedDate: today() },
+    { id: uid(), title: '1984', author: 'George Orwell',
+      isbn: '978-0-452-28423-4', category: 'Science', quantity: 5, available: 5,
+      description: 'Totalitarian society ruled by Big Brother.',
+      coverImage: '', addedDate: today() },
+    { id: uid(), title: 'The Hobbit', author: 'J.R.R. Tolkien',
+      isbn: '978-0-547-92822-7', category: 'Fantasy', quantity: 4, available: 4,
+      description: 'Bilbo Baggins embarks on an adventure.',
+      coverImage: '', addedDate: today() },
   ];
+
+  const baseMember = (name, email, phone) => ({
+    id: uid(),
+    membershipId: '', // filled below
+    name, email, phone,
+    password: simpleHash('user123'),
+    role: 'user',
+    membershipDate: today(),
+    active: true,
+  });
 
   const sampleMembers = [
-    { id: 'admin_1', name: 'Library Admin', email: 'admin@library.com', phone: '555-0000', password: 'admin123', role: 'admin', active: true, membershipDate: '2025-01-01' },
-    { id: 'user_1', name: 'Alice Johnson', email: 'alice@example.com', phone: '555-0101', password: 'user123', role: 'user', active: true, membershipDate: today() },
-    { id: 'user_2', name: 'Bob Smith', email: 'bob@example.com', phone: '555-0102', password: 'user123', role: 'user', active: true, membershipDate: today() },
-    { id: 'user_3', name: 'Carol Davis', email: 'carol@example.com', phone: '555-0103', password: 'user123', role: 'user', active: true, membershipDate: today() },
-    { id: 'user_4', name: 'David Wilson', email: 'david@example.com', phone: '555-0104', password: 'user123', role: 'user', active: false, membershipDate: today() },
+    adminMember,
+    baseMember('Alice Johnson', 'alice@example.com', '555-0101'),
+    baseMember('Bob Smith', 'bob@example.com', '555-0102'),
+    baseMember('Carol Davis', 'carol@example.com', '555-0103'),
   ];
+
+  // Generate membership IDs
+  let existingIds = sampleMembers.map((m) => m.membershipId).filter(Boolean);
+  sampleMembers.forEach((m) => {
+    if (!m.membershipId) {
+      m.membershipId = generateMembershipId(existingIds);
+      existingIds.push(m.membershipId);
+    }
+  });
 
   const sampleBorrows = [
-    { id: uid(), bookId: sampleBooks[1].id, memberId: sampleMembers[1].id, borrowDate: daysFromNow(-12), dueDate: daysFromNow(-2), returnDate: null, status: 'borrowed' },
-    { id: uid(), bookId: sampleBooks[3].id, memberId: sampleMembers[2].id, borrowDate: daysFromNow(-8), dueDate: daysFromNow(2), returnDate: null, status: 'borrowed' },
-    { id: uid(), bookId: sampleBooks[0].id, memberId: sampleMembers[3].id, borrowDate: daysFromNow(-20), dueDate: daysFromNow(-10), returnDate: daysFromNow(-8), status: 'returned' },
+    { id: uid(), bookId: sampleBooks[1].id, memberId: sampleMembers[1].id,
+      borrowDate: daysFromNow(-20), dueDate: daysFromNow(-6),
+      returnDate: null, status: 'borrowed', fine: 0, lost: false },
+    { id: uid(), bookId: sampleBooks[3].id, memberId: sampleMembers[2].id,
+      borrowDate: daysFromNow(-8), dueDate: daysFromNow(2),
+      returnDate: null, status: 'borrowed', fine: 0, lost: false },
   ];
 
-  const sampleBookings = [
-    { id: uid(), bookId: sampleBooks[4].id, memberId: sampleMembers[1].id, bookingDate: today(), status: 'pending' }
-  ];
-
+  // Update availability
   const bookMap = {};
-  sampleBooks.forEach(b => bookMap[b.id] = b);
-  sampleBorrows.forEach(br => {
+  sampleBooks.forEach((b) => (bookMap[b.id] = b));
+  sampleBorrows.forEach((br) => {
     if (br.status === 'borrowed' && bookMap[br.bookId]) {
       bookMap[br.bookId].available -= 1;
     }
   });
 
-  const newData = { books: sampleBooks, members: sampleMembers, borrows: sampleBorrows, bookings: sampleBookings };
+  const newData = {
+    books: sampleBooks,
+    members: sampleMembers,
+    borrows: sampleBorrows,
+    reservations: [],
+    notifications: [],
+    settings: { ...DEFAULT_SETTINGS },
+  };
   saveData(newData);
 };
 
-// ----- Context & Provider -----
+// ── Context ─────────────────────────────────────────────────
 const DataContext = createContext(null);
 
 export const DataProvider = ({ children }) => {
   const [data, setData] = useState(() => loadData());
-  const [currentUser, setCurrentUser] = useState(() => loadAuth());
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const raw = localStorage.getItem(AUTH_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
 
-  // Seed on first mount
   useEffect(() => {
     seedSampleData();
     setData(loadData());
   }, []);
 
   const refresh = useCallback(() => setData(loadData()), []);
-  const update = useCallback((newData) => { saveData(newData); setData(newData); }, []);
-
-  // ----- Auth Handlers -----
-  const login = useCallback((email, password) => {
-    const trimmedEmail = email.trim().toLowerCase();
-    const membersList = data.members.length > 0 ? data.members : loadData().members;
-    const found = membersList.find(m => m.email && m.email.toLowerCase() === trimmedEmail && (m.password === password || (!m.password && (password === 'admin123' || password === 'user123'))));
-    if (!found) {
-      return { success: false, error: 'Invalid email or password.' };
-    }
-    if (found.active === false) {
-      return { success: false, error: 'Your account is currently inactive. Please contact the administrator.' };
-    }
-    const authUser = { id: found.id, name: found.name, email: found.email, role: found.role || (found.email.toLowerCase() === 'admin@library.com' ? 'admin' : 'user') };
-    setCurrentUser(authUser);
-    saveAuth(authUser);
-    return { success: true, user: authUser };
-  }, [data.members]);
-
-  const logout = useCallback(() => {
-    setCurrentUser(null);
-    saveAuth(null);
+  const update = useCallback((newData) => {
+    saveData(newData);
+    setData(newData);
   }, []);
 
-  // ----- CRUD operations -----
-  const addBook = useCallback((book) => {
-    const d = { ...data, books: [...data.books, { ...book, id: uid(), addedDate: today() }] };
+  // ── Notifications ─────────────────────────────────────────
+  const pushNotification = useCallback((n) => {
+    const notif = {
+      id: uid(),
+      type: n.type || 'info', // success | error | warning | info
+      message: n.message,
+      createdAt: Date.now(),
+    };
+    const d = { ...loadData() };
+    d.notifications = [...(d.notifications || []), notif].slice(-5);
     update(d);
-  }, [data, update]);
+    return notif.id;
+  }, [update]);
+
+  const dismissNotification = useCallback((id) => {
+    const d = { ...loadData() };
+    d.notifications = (d.notifications || []).filter((n) => n.id !== id);
+    update(d);
+  }, [update]);
+
+  // ── Auth ──────────────────────────────────────────────────
+  const login = useCallback((email, password) => {
+    const d = loadData();
+    const user = d.members.find(
+      (m) => m.email.toLowerCase() === email.toLowerCase().trim()
+    );
+    if (!user) return { ok: false, error: 'No account found with that email.' };
+    if (user.password !== simpleHash(password)) {
+      return { ok: false, error: 'Incorrect password.' };
+    }
+    if (user.active === false) {
+      return { ok: false, error: 'Account is deactivated.' };
+    }
+    const safe = { ...user };
+    delete safe.password;
+    localStorage.setItem(AUTH_KEY, JSON.stringify(safe));
+    setCurrentUser(safe);
+    return { ok: true, user: safe };
+  }, []);
+
+  const logout = useCallback(() => {
+    localStorage.removeItem(AUTH_KEY);
+    setCurrentUser(null);
+  }, []);
+
+  // Password reset: verifies email+phone, sets a new password
+  const resetPassword = useCallback((email, phone, newPassword) => {
+    const d = loadData();
+    const idx = d.members.findIndex(
+      (m) => m.email.toLowerCase() === email.toLowerCase().trim()
+    );
+    if (idx < 0) return { ok: false, error: 'No account with that email.' };
+    if ((d.members[idx].phone || '').trim() !== (phone || '').trim()) {
+      return { ok: false, error: 'Phone number does not match our records.' };
+    }
+    if (!newPassword || newPassword.length < 4) {
+      return { ok: false, error: 'Password must be at least 4 characters.' };
+    }
+    d.members[idx] = { ...d.members[idx], password: simpleHash(newPassword) };
+    update(d);
+    return { ok: true };
+  }, [update]);
+
+  // ── Books ─────────────────────────────────────────────────
+  const addBook = useCallback((book) => {
+    const d = { ...loadData() };
+    d.books = [...d.books, { ...book, id: uid(), addedDate: today() }];
+    update(d);
+    pushNotification({ type: 'success', message: `Book "${book.title}" added.` });
+  }, [update, pushNotification]);
 
   const editBook = useCallback((id, updates) => {
-    const d = { ...data, books: data.books.map(b => b.id === id ? { ...b, ...updates } : b) };
+    const d = { ...loadData() };
+    d.books = d.books.map((b) => (b.id === id ? { ...b, ...updates } : b));
     update(d);
-  }, [data, update]);
+    pushNotification({ type: 'success', message: 'Book updated.' });
+  }, [update, pushNotification]);
 
   const deleteBook = useCallback((id) => {
-    const d = {
-      ...data,
-      books: data.books.filter(b => b.id !== id),
-      borrows: data.borrows.filter(br => br.bookId !== id),
-      bookings: (data.bookings || []).filter(bk => bk.bookId !== id)
-    };
+    const d = { ...loadData() };
+    d.books = d.books.filter((b) => b.id !== id);
+    d.borrows = d.borrows.filter((br) => br.bookId !== id);
+    d.reservations = (d.reservations || []).filter((r) => r.bookId !== id);
     update(d);
-  }, [data, update]);
+    pushNotification({ type: 'warning', message: 'Book deleted.' });
+  }, [update, pushNotification]);
 
+  // ── Members ───────────────────────────────────────────────
   const addMember = useCallback((member) => {
-    const d = { ...data, members: [...data.members, { ...member, id: uid(), membershipDate: today() }] };
+    const d = { ...loadData() };
+    const existingIds = d.members.map((m) => m.membershipId).filter(Boolean);
+    const membershipId = member.membershipId || generateMembershipId(existingIds);
+    const newMember = {
+      ...member,
+      id: uid(),
+      membershipId,
+      password: simpleHash(member.password || 'user123'),
+      role: member.role || 'user',
+      membershipDate: today(),
+      active: member.active !== false,
+    };
+    d.members = [...d.members, newMember];
     update(d);
-  }, [data, update]);
+    pushNotification({
+      type: 'success',
+      message: `Member added — ID: ${membershipId}`,
+    });
+    return newMember;
+  }, [update, pushNotification]);
 
   const editMember = useCallback((id, updates) => {
-    const d = { ...data, members: data.members.map(m => m.id === id ? { ...m, ...updates } : m) };
+    const d = { ...loadData() };
+    d.members = d.members.map((m) => {
+      if (m.id !== id) return m;
+      const next = { ...m, ...updates };
+      if (updates.password) next.password = simpleHash(updates.password);
+      return next;
+    });
     update(d);
-  }, [data, update]);
+    pushNotification({ type: 'success', message: 'Member updated.' });
+  }, [update, pushNotification]);
 
   const deleteMember = useCallback((id) => {
-    const d = {
-      ...data,
-      members: data.members.filter(m => m.id !== id),
-      borrows: data.borrows.filter(br => br.memberId !== id),
-      bookings: (data.bookings || []).filter(bk => bk.memberId !== id)
-    };
+    const d = { ...loadData() };
+    d.members = d.members.filter((m) => m.id !== id);
+    d.borrows = d.borrows.filter((br) => br.memberId !== id);
+    d.reservations = (d.reservations || []).filter((r) => r.memberId !== id);
     update(d);
-  }, [data, update]);
+    pushNotification({ type: 'warning', message: 'Member deleted.' });
+  }, [update, pushNotification]);
 
+  // ── Borrows ───────────────────────────────────────────────
   const addBorrow = useCallback((borrow) => {
-    const book = data.books.find(bk => bk.id === borrow.bookId);
-    if (!book || book.available <= 0) return;
-    const b = { ...borrow, id: uid(), borrowDate: today(), returnDate: null, status: 'borrowed' };
-    const d = {
-      ...data,
-      borrows: [...data.borrows, b],
-      books: data.books.map(bk => bk.id === borrow.bookId ? { ...bk, available: bk.available - 1 } : bk),
-    };
+    const d = { ...loadData() };
+    const book = d.books.find((bk) => bk.id === borrow.bookId);
+    if (!book || book.available <= 0) {
+      pushNotification({ type: 'error', message: 'No copies available.' });
+      return;
+    }
+    // If member has an active reservation for this book, fulfil it
+    const reservation = (d.reservations || []).find(
+      (r) => r.bookId === borrow.bookId &&
+             r.memberId === borrow.memberId &&
+             r.status === 'pending'
+    );
+    if (reservation) {
+      d.reservations = d.reservations.map((r) =>
+        r.id === reservation.id ? { ...r, status: 'fulfilled' } : r
+      );
+    }
+    d.borrows = [...d.borrows, {
+      ...borrow,
+      id: uid(),
+      borrowDate: today(),
+      returnDate: null,
+      status: 'borrowed',
+      fine: 0,
+      lost: false,
+    }];
+    d.books = d.books.map((bk) =>
+      bk.id === borrow.bookId ? { ...bk, available: bk.available - 1 } : bk
+    );
     update(d);
-  }, [data, update]);
+    pushNotification({ type: 'success', message: `Book issued to member.` });
+  }, [update, pushNotification]);
 
+  // Return a book & compute fine
   const returnBorrow = useCallback((borrowId) => {
-    const borrow = data.borrows.find(b => b.id === borrowId);
+    const d = { ...loadData() };
+    const borrow = d.borrows.find((b) => b.id === borrowId);
     if (!borrow || borrow.status === 'returned') return;
-    const d = {
-      ...data,
-      borrows: data.borrows.map(b => b.id === borrowId ? { ...b, returnDate: today(), status: 'returned' } : b),
-      books: data.books.map(bk => bk.id === borrow.bookId ? { ...bk, available: bk.available + 1 } : bk),
-    };
+    const fine = calculateOverdueFine(borrow.dueDate, d.settings.overdueFineTiers);
+    d.borrows = d.borrows.map((b) =>
+      b.id === borrowId
+        ? { ...b, returnDate: today(), status: 'returned', fine }
+        : b
+    );
+    d.books = d.books.map((bk) =>
+      bk.id === borrow.bookId ? { ...bk, available: bk.available + 1 } : bk
+    );
     update(d);
-  }, [data, update]);
+    pushNotification({
+      type: fine > 0 ? 'warning' : 'success',
+      message: fine > 0
+        ? `Book returned. Overdue fine: ${d.settings.currency}${fine.toFixed(2)}`
+        : 'Book returned on time.',
+    });
+  }, [update, pushNotification]);
+
+  // Mark a borrow as LOST (charges lost-book fine)
+  const markLost = useCallback((borrowId) => {
+    const d = { ...loadData() };
+    const borrow = d.borrows.find((b) => b.id === borrowId);
+    if (!borrow || borrow.status === 'returned') return;
+    const total =
+      Number(d.settings.lostBookFine || 0) +
+      Number(d.settings.lostBookProcessingFee || 0);
+    d.borrows = d.borrows.map((b) =>
+      b.id === borrowId
+        ? { ...b, status: 'lost', lost: true, fine: total, returnDate: today() }
+        : b
+    );
+    // Lost copy is removed from inventory permanently
+    d.books = d.books.map((bk) =>
+      bk.id === borrow.bookId
+        ? { ...bk, quantity: Math.max(0, bk.quantity - 1) }
+        : bk
+    );
+    update(d);
+    pushNotification({
+      type: 'error',
+      message: `Book marked as lost. Charge: ${d.settings.currency}${total.toFixed(2)}`,
+    });
+  }, [update, pushNotification]);
 
   const deleteBorrow = useCallback((borrowId) => {
-    const borrow = data.borrows.find(b => b.id === borrowId);
-    const d = { ...data, borrows: data.borrows.filter(b => b.id !== borrowId) };
+    const d = { ...loadData() };
+    const borrow = d.borrows.find((b) => b.id === borrowId);
+    d.borrows = d.borrows.filter((b) => b.id !== borrowId);
     if (borrow && borrow.status === 'borrowed') {
-      d.books = data.books.map(bk => bk.id === borrow.bookId ? { ...bk, available: bk.available + 1 } : bk);
+      d.books = d.books.map((bk) =>
+        bk.id === borrow.bookId ? { ...bk, available: bk.available + 1 } : bk
+      );
     }
     update(d);
-  }, [data, update]);
+    pushNotification({ type: 'warning', message: 'Borrow record deleted.' });
+  }, [update, pushNotification]);
 
-  // ----- Booking / Reservation Handlers -----
-  const addBooking = useCallback(({ bookId, memberId }) => {
-    const book = data.books.find(bk => bk.id === bookId);
-    if (!book || book.available <= 0) return { success: false, error: 'Book is not available for booking.' };
-    const existing = (data.bookings || []).find(b => b.bookId === bookId && b.memberId === memberId && b.status === 'pending');
-    if (existing) return { success: false, error: 'You already have a pending booking for this book.' };
+  // ── Reservations / Bookings ───────────────────────────────
+  const addReservation = useCallback((bookId, memberId) => {
+    const d = { ...loadData() };
+    d.reservations = d.reservations || [];
 
-    const newBooking = { id: uid(), bookId, memberId, bookingDate: today(), status: 'pending' };
-    const d = {
-      ...data,
-      bookings: [...(data.bookings || []), newBooking]
+    // Check user limit
+    const activeCount = d.reservations.filter(
+      (r) => r.memberId === memberId && r.status === 'pending'
+    ).length;
+    if (activeCount >= d.settings.maxReservationsPerUser) {
+      pushNotification({
+        type: 'error',
+        message: `Reservation limit reached (${d.settings.maxReservationsPerUser}).`,
+      });
+      return { ok: false, success: false, error: `Reservation limit reached (${d.settings.maxReservationsPerUser}).` };
+    }
+
+    // Check if already reserved
+    const existing = d.reservations.find(
+      (r) => r.bookId === bookId && r.memberId === memberId && r.status === 'pending'
+    );
+    if (existing) {
+      pushNotification({ type: 'warning', message: 'Already reserved.' });
+      return { ok: false, success: false, error: 'Already reserved.' };
+    }
+
+    const reservation = {
+      id: uid(),
+      bookId,
+      memberId,
+      reservedDate: today(),
+      bookingDate: today(), // alias for compatibility
+      expiresAt: daysFromNow(d.settings.reservationHoldDays),
+      fee: Number(d.settings.reservationFee || 0),
+      status: 'pending',
     };
+    d.reservations.push(reservation);
     update(d);
-    return { success: true };
-  }, [data, update]);
+    pushNotification({
+      type: 'success',
+      message: `Reserved. Fee: ${d.settings.currency}${reservation.fee.toFixed(2)}`,
+    });
+    return { ok: true, success: true, reservation };
+  }, [update, pushNotification]);
 
-  const cancelBooking = useCallback((bookingId) => {
-    const d = {
-      ...data,
-      bookings: (data.bookings || []).map(b => b.id === bookingId ? { ...b, status: 'cancelled' } : b)
-    };
+  const cancelReservation = useCallback((id) => {
+    const d = { ...loadData() };
+    d.reservations = (d.reservations || []).map((r) =>
+      r.id === id ? { ...r, status: 'cancelled' } : r
+    );
     update(d);
-  }, [data, update]);
+    pushNotification({ type: 'info', message: 'Reservation cancelled.' });
+  }, [update, pushNotification]);
 
-  const approveBooking = useCallback((bookingId) => {
-    const booking = (data.bookings || []).find(b => b.id === bookingId);
-    if (!booking || booking.status !== 'pending') return;
-
-    const book = data.books.find(bk => bk.id === booking.bookId);
-    if (!book || book.available <= 0) return;
-
+  const approveReservation = useCallback((id) => {
+    const d = { ...loadData() };
+    const res = (d.reservations || []).find(r => r.id === id);
+    if (!res) return;
+    const book = d.books.find(b => b.id === res.bookId);
+    if (!book || book.available <= 0) {
+      pushNotification({ type: 'error', message: 'No copies available to issue.' });
+      return;
+    }
+    d.reservations = d.reservations.map(r => r.id === id ? { ...r, status: 'approved' } : r);
+    // Also issue borrow
     const dueDate = daysFromNow(14);
-    const newBorrow = { id: uid(), bookId: booking.bookId, memberId: booking.memberId, borrowDate: today(), dueDate, returnDate: null, status: 'borrowed' };
-
-    const d = {
-      ...data,
-      borrows: [...data.borrows, newBorrow],
-      books: data.books.map(bk => bk.id === booking.bookId ? { ...bk, available: bk.available - 1 } : bk),
-      bookings: (data.bookings || []).map(b => b.id === bookingId ? { ...b, status: 'approved' } : b)
-    };
+    d.borrows = [...d.borrows, {
+      id: uid(),
+      bookId: res.bookId,
+      memberId: res.memberId,
+      borrowDate: today(),
+      dueDate,
+      returnDate: null,
+      status: 'borrowed',
+      fine: 0,
+      lost: false,
+    }];
+    d.books = d.books.map(b => b.id === res.bookId ? { ...b, available: b.available - 1 } : b);
     update(d);
-  }, [data, update]);
+    pushNotification({ type: 'success', message: 'Reservation approved & book issued.' });
+  }, [update, pushNotification]);
+
+  // Backward-compatible booking aliases
+  const addBooking = useCallback(({ bookId, memberId }) => addReservation(bookId, memberId), [addReservation]);
+  const cancelBooking = useCallback((id) => cancelReservation(id), [cancelReservation]);
+  const approveBooking = useCallback((id) => approveReservation(id), [approveReservation]);
+
+  // ── Settings ──────────────────────────────────────────────
+  const updateSettings = useCallback((updates) => {
+    const d = { ...loadData() };
+    d.settings = { ...d.settings, ...updates };
+    update(d);
+    pushNotification({ type: 'success', message: 'Settings saved.' });
+  }, [update, pushNotification]);
+
+  // ── Derived helpers ───────────────────────────────────────
+  const getMemberFines = useCallback((memberId) => {
+    const d = loadData();
+    let total = 0;
+    const items = [];
+    d.borrows.forEach((b) => {
+      if (b.memberId !== memberId) return;
+      let fine = 0;
+      if (b.status === 'lost') {
+        fine = Number(b.fine || 0);
+      } else if (b.status === 'borrowed' && isOverdue(b.dueDate)) {
+        fine = calculateOverdueFine(b.dueDate, d.settings.overdueFineTiers);
+      } else if (b.status === 'returned') {
+        fine = Number(b.fine || 0);
+      }
+      if (fine > 0) {
+        items.push({ borrow: b, fine });
+        total += fine;
+      }
+    });
+    return { total, items };
+  }, []);
 
   const value = {
     data,
     currentUser,
-    login,
-    logout,
     refresh,
-    addBook,
-    editBook,
-    deleteBook,
-    addMember,
-    editMember,
-    deleteMember,
-    addBorrow,
-    returnBorrow,
-    deleteBorrow,
-    addBooking,
-    cancelBooking,
-    approveBooking,
+    // auth
+    login, logout, resetPassword,
+    // notifications
+    pushNotification, dismissNotification,
+    // books
+    addBook, editBook, deleteBook,
+    // members
+    addMember, editMember, deleteMember,
+    // borrows
+    addBorrow, returnBorrow, markLost, deleteBorrow,
+    // reservations & bookings
+    addReservation, cancelReservation, approveReservation,
+    addBooking, cancelBooking, approveBooking,
+    // settings
+    updateSettings,
+    // derived
+    getMemberFines,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };
 
 export const useData = () => useContext(DataContext);
-
-// Helper utilities for components
-export const formatDate = (d) => {
-  if (!d) return '—';
-  const dt = new Date(d + 'T00:00:00');
-  return dt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-};
-export const isOverdue = (dueDate) => dueDate && dueDate < today();

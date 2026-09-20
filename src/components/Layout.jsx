@@ -1,19 +1,18 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useData } from '../hooks/useData';
+import Notifications from './Notifications';
 
-const adminNavItems = [
-  { path: '/', label: 'Dashboard', icon: 'fa-gauge-high' },
-  { path: '/books', label: 'Books', icon: 'fa-book' },
-  { path: '/members', label: 'Members', icon: 'fa-users' },
-  { path: '/borrows', label: 'Borrow / Return', icon: 'fa-handshake' },
-  { path: '/admin-bookings', label: 'Reservations', icon: 'fa-bookmark' },
-  { path: '/reports', label: 'Reports', icon: 'fa-chart-simple' },
-];
-
-const userNavItems = [
-  { path: '/user-portal', label: 'Book Catalog & Search', icon: 'fa-book-open' },
-  { path: '/my-bookings', label: 'My Bookings & Activity', icon: 'fa-bookmark' },
+const allNavItems = [
+  { path: '/admin',       label: 'Dashboard',       icon: 'fa-gauge-high',   roles: ['admin'] },
+  { path: '/books',       label: 'Books',           icon: 'fa-book',         roles: ['admin'] },
+  { path: '/members',     label: 'Members',         icon: 'fa-users',        roles: ['admin'] },
+  { path: '/borrows',     label: 'Borrow / Return', icon: 'fa-handshake',    roles: ['admin'] },
+  { path: '/reservations',label: 'Reservations',    icon: 'fa-bookmark',     roles: ['admin', 'user'] },
+  { path: '/reports',     label: 'Reports',         icon: 'fa-chart-simple', roles: ['admin'] },
+  { path: '/settings',    label: 'Settings',        icon: 'fa-gear',         roles: ['admin'] },
+  { path: '/portal',      label: 'Book Catalog',    icon: 'fa-book-open',    roles: ['user'] },
+  { path: '/portal/bookings', label: 'My Bookings', icon: 'fa-list-check',   roles: ['user'] },
 ];
 
 export default function Layout({ children }) {
@@ -22,10 +21,14 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const isAdmin = currentUser?.role === 'admin';
-  const navItems = isAdmin ? adminNavItems : userNavItems;
+  const role = currentUser?.role || 'user';
+  const isAdmin = role === 'admin';
+  const navItems = allNavItems.filter((item) => item.roles.includes(role));
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => {
+    if (path === '/admin' && (location.pathname === '/admin' || location.pathname === '/')) return true;
+    return location.pathname === path;
+  };
 
   const handleLogout = () => {
     logout();
@@ -33,7 +36,7 @@ export default function Layout({ children }) {
   };
 
   return (
-    <div style={{ display: 'flex' }}>
+    <div style={{ display: 'flex' }} className="min-h-screen bg-slate-50">
       {/* Overlay for mobile */}
       <div
         className={`sidebar-overlay fixed inset-0 bg-black/30 z-40 md:hidden ${sidebarOpen ? 'block' : 'hidden'}`}
@@ -55,13 +58,13 @@ export default function Layout({ children }) {
         </div>
 
         <nav className="p-4 space-y-1">
-          {navItems.map(item => (
+          {navItems.map((item) => (
             <Link
               key={item.path}
               to={item.path}
               className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive(item.path)
-                  ? 'bg-blue-600/20 text-blue-400'
+                  ? 'bg-blue-600/20 text-blue-400 font-semibold'
                   : 'text-slate-300 hover:bg-white/5 hover:text-white'
               }`}
               onClick={() => setSidebarOpen(false)}
@@ -86,7 +89,7 @@ export default function Layout({ children }) {
             </button>
             <h2 className="text-2xl font-bold text-slate-800">
               <i className="fas fa-book-open text-blue-500 mr-2" />
-              {navItems.find(item => isActive(item.path))?.label || (isAdmin ? 'Dashboard' : 'Portal')}
+              {navItems.find((item) => isActive(item.path))?.label || (isAdmin ? 'Dashboard' : 'Portal')}
             </h2>
           </div>
 
@@ -118,6 +121,9 @@ export default function Layout({ children }) {
 
         {children}
       </main>
+
+      {/* Global Notifications */}
+      <Notifications />
     </div>
   );
 }

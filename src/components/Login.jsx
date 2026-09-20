@@ -3,182 +3,142 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../hooks/useData';
 
 export default function Login() {
-  const { login } = useData();
+  const { login, resetPassword } = useData();
   const navigate = useNavigate();
-
-  const [activeTab, setActiveTab] = useState('user'); // 'user' | 'admin'
+  const [mode, setMode] = useState('login'); // 'login' | 'reset'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleLogin = (e) => {
     e.preventDefault();
     setError('');
-
-    if (!email.trim() || !password) {
-      setError('Please provide both email and password.');
-      return;
-    }
-
     const res = login(email, password);
-    if (!res.success) {
-      setError(res.error);
-      return;
-    }
-
-    if (res.user.role === 'admin') {
-      navigate('/');
-    } else {
-      navigate('/user-portal');
-    }
+    if (!res.ok) return setError(res.error);
+    navigate(res.user.role === 'admin' ? '/admin' : '/portal');
   };
 
-  const fillDemoAdmin = () => {
-    setEmail('admin@library.com');
-    setPassword('admin123');
-    setActiveTab('admin');
+  const handleReset = (e) => {
+    e.preventDefault();
     setError('');
-    const res = login('admin@library.com', 'admin123');
-    if (res.success) navigate('/');
-    else setError(res.error);
-  };
-
-  const fillDemoUser = () => {
-    setEmail('alice@example.com');
-    setPassword('user123');
-    setActiveTab('user');
-    setError('');
-    const res = login('alice@example.com', 'user123');
-    if (res.success) navigate('/user-portal');
-    else setError(res.error);
+    setInfo('');
+    const res = resetPassword(email, phone, newPassword);
+    if (!res.ok) return setError(res.error);
+    setInfo('Password reset successfully. You can now log in.');
+    setMode('login');
+    setPassword('');
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-        {/* Header banner */}
-        <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-8 text-white text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/10 text-3xl mb-3 backdrop-blur-sm">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-700 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
+        <div className="text-center mb-6">
+          <div className="text-4xl text-blue-500 mb-2">
             <i className="fas fa-book-open" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">LibraSys Portal</h1>
-          <p className="text-blue-100 text-xs mt-1">Library Management & Booking System</p>
+          <h1 className="text-2xl font-bold text-slate-800">LibraSys</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            {mode === 'login' ? 'Sign in to your account' : 'Reset your password'}
+          </p>
         </div>
 
-        {/* Tab Selection */}
-        <div className="flex border-b border-slate-200 bg-slate-50">
-          <button
-            type="button"
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center justify-center gap-2 ${
-              activeTab === 'user'
-                ? 'border-blue-600 text-blue-600 bg-white'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-            onClick={() => { setActiveTab('user'); setError(''); }}
-          >
-            <i className="fas fa-user-graduate" /> User Portal
-          </button>
-          <button
-            type="button"
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center justify-center gap-2 ${
-              activeTab === 'admin'
-                ? 'border-indigo-600 text-indigo-600 bg-white'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-            onClick={() => { setActiveTab('admin'); setError(''); }}
-          >
-            <i className="fas fa-user-shield" /> Admin Login
-          </button>
-        </div>
-
-        {/* Form body */}
-        <div className="p-6">
-          <div className="mb-4 text-center">
-            <h2 className="text-lg font-semibold text-slate-800">
-              {activeTab === 'admin' ? 'Administrator Login' : 'Library User Login'}
-            </h2>
-            <p className="text-xs text-slate-500">
-              {activeTab === 'admin'
-                ? 'Access management panel and reports.'
-                : 'Sign in to browse, reserve, and manage your books.'}
-            </p>
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-4">
+            <i className="fas fa-circle-exclamation mr-2" />{error}
           </div>
+        )}
+        {info && (
+          <div className="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg p-3 mb-4">
+            <i className="fas fa-check-circle mr-2" />{info}
+          </div>
+        )}
 
-          {error && (
-            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-xs p-3 rounded-lg flex items-center gap-2">
-              <i className="fas fa-circle-exclamation text-base" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
+        {mode === 'login' ? (
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
-                Email Address
-              </label>
-              <div className="relative">
-                <i className="fas fa-envelope absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
-                <input
-                  type="email"
-                  required
-                  className="w-full pl-9 pr-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+              <input
+                type="email" required value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                placeholder="you@example.com"
+              />
             </div>
-
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
-                Password
-              </label>
-              <div className="relative">
-                <i className="fas fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
-                <input
-                  type="password"
-                  required
-                  className="w-full pl-9 pr-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+              <input
+                type="password" required value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                placeholder="••••••••"
+              />
             </div>
-
             <button
               type="submit"
-              className={`w-full py-2.5 rounded-lg text-white font-medium text-sm transition shadow-md ${
-                activeTab === 'admin'
-                  ? 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500'
-                  : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
-              }`}
+              className="w-full bg-blue-500 text-white py-2.5 rounded-lg hover:bg-blue-600 transition font-medium"
             >
-              Sign In as {activeTab === 'admin' ? 'Admin' : 'User'}
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('reset'); setError(''); }}
+              className="w-full text-sm text-blue-500 hover:underline"
+            >
+              Forgot password?
+            </button>
+            <div className="text-xs text-slate-400 text-center pt-3 border-t">
+              Demo — Admin: admin@library.com / admin123<br />
+              User: alice@example.com / user123
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleReset} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+              <input
+                type="email" required value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Phone (on your account)
+              </label>
+              <input
+                type="text" required value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                placeholder="555-0101"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">New password</label>
+              <input
+                type="password" required value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                minLength={4}
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-green-500 text-white py-2.5 rounded-lg hover:bg-green-600 transition font-medium"
+            >
+              Reset Password
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('login'); setError(''); }}
+              className="w-full text-sm text-slate-500 hover:underline"
+            >
+              Back to sign in
             </button>
           </form>
-
-          {/* Demo shortcuts */}
-          <div className="mt-6 pt-4 border-t text-center space-y-2">
-            <p className="text-xs font-semibold text-slate-400 uppercase">Quick Demo Login Shortcuts</p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="flex-1 py-1.5 px-3 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-xs hover:bg-indigo-100 transition"
-                onClick={fillDemoAdmin}
-              >
-                <i className="fas fa-key mr-1" /> Demo Admin
-              </button>
-              <button
-                type="button"
-                className="flex-1 py-1.5 px-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs hover:bg-blue-100 transition"
-                onClick={fillDemoUser}
-              >
-                <i className="fas fa-user mr-1" /> Demo User
-              </button>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

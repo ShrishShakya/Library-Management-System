@@ -1,5 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useData } from '../hooks/useData';
+import { fileToBase64 } from '../utils/helpers';
 import Modal from './Modal';
 
 // ✅ Static category list
@@ -27,6 +29,7 @@ const CATEGORIES = [
 
 export default function Books() {
   const { data, addBook, editBook, deleteBook } = useData();
+  const location = useLocation();
   const books = data.books || [];
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -41,8 +44,17 @@ export default function Books() {
     publishYear: new Date().getFullYear(),
     publisher: '',
     quantity: 1,
-    description: ''
+    description: '',
+    coverImage: '',
   });
+
+  // Open modal if query param action=add
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('action') === 'add') {
+      openModal();
+    }
+  }, [location.search]);
 
   // Dynamic categories for filter (from existing books)
   const filterCategories = useMemo(() => {
@@ -87,7 +99,8 @@ export default function Books() {
         publishYear: book.publishYear || new Date().getFullYear(),
         publisher: book.publisher || '',
         quantity: book.quantity,
-        description: book.description || ''
+        description: book.description || '',
+        coverImage: book.coverImage || '',
       });
     } else {
       setEditingId(null);
@@ -99,7 +112,8 @@ export default function Books() {
         publishYear: new Date().getFullYear(),
         publisher: '',
         quantity: 1,
-        description: ''
+        description: '',
+        coverImage: '',
       });
     }
     setModalOpen(true);
@@ -118,11 +132,12 @@ export default function Books() {
       publisher: form.publisher.trim() || 'Independent',
       quantity: parseInt(form.quantity) || 1,
       description: form.description.trim() || '',
+      coverImage: form.coverImage || '',
     };
     if (editingId) {
       const old = books.find(b => b.id === editingId);
-      const diff = payload.quantity - old.quantity;
-      editBook(editingId, { ...payload, available: Math.max(0, old.available + diff) });
+      const diff = payload.quantity - (old ? old.quantity : 0);
+      editBook(editingId, { ...payload, available: Math.max(0, (old ? old.available : payload.quantity) + diff) });
     } else {
       addBook({ ...payload, available: payload.quantity });
     }
@@ -130,7 +145,7 @@ export default function Books() {
   };
 
   const handleDelete = (id) => {
-    if (window.confirm('Delete this book? This will also remove associated borrow and booking records.')) {
+    if (window.confirm('Delete this book? This will also remove associated borrow and reservation records.')) {
       deleteBook(id);
     }
   };
@@ -162,7 +177,10 @@ export default function Books() {
             {publishers.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-        <button className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition text-sm flex items-center gap-1 shadow-sm" onClick={() => openModal()}>
+        <button
+          className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition text-sm flex items-center gap-1 shadow-sm"
+          onClick={() => openModal()}
+        >
           <i className="fas fa-plus mr-1" /> Add Book
         </button>
       </div>
@@ -179,6 +197,7 @@ export default function Books() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500 border-b">
                 <tr>
+                  <th className="px-4 py-3 text-left">Cover</th>
                   <th className="px-4 py-3 text-left">Title</th>
                   <th className="px-4 py-3 text-left">Author</th>
                   <th className="px-4 py-3 text-left">Category</th>
@@ -192,6 +211,15 @@ export default function Books() {
               <tbody>
                 {filtered.map(b => (
                   <tr key={b.id} className="border-b hover:bg-slate-50">
+                    <td className="px-4 py-3">
+                      <div className="w-10 h-14 bg-slate-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0 border border-slate-200">
+                        {b.coverImage ? (
+                          <img src={b.coverImage} alt={b.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <i className="fas fa-book text-slate-300 text-xs" />
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 font-medium text-slate-900 max-w-[180px] truncate" title={b.title}>
                       {b.title}
                       <span className="block text-xs text-slate-400 font-normal">ISBN: {b.isbn || '—'}</span>
@@ -217,6 +245,43 @@ export default function Books() {
       {/* Modal */}
       <Modal isOpen={modalOpen} onClose={closeModal} title={editingId ? 'Edit Book' : 'Add New Book'}>
         <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Cover Image</label>
+            <div className="flex items-center gap-3">
+              <div className="w-16 h-20 bg-slate-100 rounded flex items-center justify-center overflow-hidden border border-slate-200">
+                {form.coverImage ? (
+                  <img src={form.coverImage} alt="cover" className="w-full h-full object-cover" />
+                ) : (
+                  <i className="fas fa-image text-slate-300 text-xl" />
+                )}
+              </div>
+              <div className="flex-1 space-y-1">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="text-xs file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const b64 = await fileToBase64(file);
+                    setForm((prev) => ({ ...prev, coverImage: b64 }));
+                  }}
+                />
+                {form.coverImage && (
+                  <div>
+                    <button
+                      type="button"
+                      className="text-xs text-red-500 hover:underline"
+                      onClick={() => setForm((prev) => ({ ...prev, coverImage: '' }))}
+                    >
+                      <i className="fas fa-trash-can mr-1" /> Remove image
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Title *</label>
             <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" value={form.title} onChange={(e) => setForm({...form, title: e.target.value})} placeholder="Book title" />
