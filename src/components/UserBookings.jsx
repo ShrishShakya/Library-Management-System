@@ -99,15 +99,20 @@ export default function UserBookings() {
                         <td className="py-3 px-3 text-slate-700 text-xs font-semibold">{formatDate(res.pickupDate || res.expiresAt)}</td>
                         <td className="py-3 px-3 text-xs font-semibold text-emerald-700">Free</td>
                         <td className="py-3 px-3">
-                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold inline-flex items-center gap-1 ${
                             res.status === 'pending'
                               ? 'bg-amber-100 text-amber-800'
                               : res.status === 'fulfilled' || res.status === 'approved'
                               ? 'bg-emerald-100 text-emerald-700'
+                              : res.status === 'rejected'
+                              ? 'bg-rose-100 text-rose-700'
                               : 'bg-slate-100 text-slate-500'
                           }`}>
-                            {res.status === 'pending' && <i className="fas fa-clock mr-1" />}
-                            {res.status.toUpperCase()}
+                            {res.status === 'pending' && <i className="fas fa-clock text-[10px]" />}
+                            {(res.status === 'approved' || res.status === 'fulfilled') && <i className="fas fa-circle-check text-[10px]" />}
+                            {res.status === 'rejected' && <i className="fas fa-circle-xmark text-[10px]" />}
+                            {res.status === 'cancelled' && <i className="fas fa-ban text-[10px]" />}
+                            {res.status === 'fulfilled' ? 'APPROVED' : res.status.toUpperCase()}
                           </span>
                         </td>
                         <td className="py-3 px-3 text-right">

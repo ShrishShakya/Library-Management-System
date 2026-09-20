@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { useData, formatDate } from '../hooks/useData';
 
 export default function BookingsAdmin() {
-  const { data, approveBooking, cancelBooking } = useData();
-  const { books, members, bookings = [] } = data;
+  const { data, approveBooking, rejectBooking, cancelBooking } = useData();
+  const { books = [], members = [], reservations = [], bookings = [] } = data;
+  const allReservations = reservations.length > 0 ? reservations : bookings;
   const [filter, setFilter] = useState('pending'); // 'pending' | 'all'
 
-  const filteredBookings = bookings.filter(b => filter === 'all' || b.status === filter);
+  const filteredBookings = allReservations.filter(b => filter === 'all' || b.status === filter);
 
   const getBook = (id) => books.find(b => b.id === id);
   const getMember = (id) => members.find(m => m.id === id);
@@ -18,7 +19,7 @@ export default function BookingsAdmin() {
         <div className="flex items-center gap-3">
           <h2 className="font-bold text-slate-800 text-lg">Member Reservations</h2>
           <span className="bg-blue-100 text-blue-700 font-semibold px-2.5 py-0.5 rounded-full text-xs">
-            {bookings.filter(b => b.status === 'pending').length} Pending
+            {allReservations.filter(b => b.status === 'pending').length} Pending
           </span>
         </div>
 
@@ -74,7 +75,7 @@ export default function BookingsAdmin() {
                         <span className="font-medium text-slate-800 block">{member?.name || 'Unknown'}</span>
                         <span className="text-xs text-slate-400">{member?.email || '—'}</span>
                       </td>
-                      <td className="px-4 py-3 text-slate-600 text-xs">{formatDate(bk.bookingDate)}</td>
+                      <td className="px-4 py-3 text-slate-600 text-xs">{formatDate(bk.reservedDate || bk.bookingDate)}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${isAvail ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                           {book ? `${book.available} available` : 'N/A'}
@@ -82,9 +83,15 @@ export default function BookingsAdmin() {
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                          bk.status === 'pending' ? 'bg-amber-100 text-amber-800' : bk.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                          bk.status === 'pending'
+                            ? 'bg-amber-100 text-amber-800'
+                            : bk.status === 'approved' || bk.status === 'fulfilled'
+                            ? 'bg-green-100 text-green-700'
+                            : bk.status === 'rejected'
+                            ? 'bg-rose-100 text-rose-700'
+                            : 'bg-slate-100 text-slate-500'
                         }`}>
-                          {bk.status.toUpperCase()}
+                          {bk.status === 'fulfilled' ? 'APPROVED' : bk.status.toUpperCase()}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right space-x-2">
@@ -98,7 +105,7 @@ export default function BookingsAdmin() {
                               <i className="fas fa-check mr-1" /> Approve & Borrow
                             </button>
                             <button
-                              onClick={() => cancelBooking(bk.id)}
+                              onClick={() => rejectBooking(bk.id)}
                               className="bg-rose-50 text-rose-600 hover:bg-rose-100 text-xs px-2.5 py-1.5 rounded-lg font-medium transition"
                             >
                               Reject

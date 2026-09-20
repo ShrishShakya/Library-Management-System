@@ -956,6 +956,15 @@ export const DataProvider = ({ children }) => {
     pushNotification({ type: 'info', message: 'Reservation cancelled.' });
   }, [update, pushNotification]);
 
+  const rejectReservation = useCallback((id) => {
+    const d = { ...loadData() };
+    d.reservations = (d.reservations || []).map((r) =>
+      r.id === id ? { ...r, status: 'rejected' } : r
+    );
+    update(d);
+    pushNotification({ type: 'warning', message: 'Reservation rejected.' });
+  }, [update, pushNotification]);
+
   const approveReservation = useCallback((id) => {
     const d = { ...loadData() };
     const res = (d.reservations || []).find((r) => r.id === id);
@@ -965,10 +974,10 @@ export const DataProvider = ({ children }) => {
       pushNotification({ type: 'error', message: 'No copies available to issue.' });
       return;
     }
-    d.reservations = d.reservations.map((r) => r.id === id ? { ...r, status: 'fulfilled' } : r);
+    d.reservations = d.reservations.map((r) => r.id === id ? { ...r, status: 'approved' } : r);
     const dueDate = daysFromNow(14);
     const fee = getBorrowFee(book, d.settings);
-    d.borrows = [...d.borrows, {
+    d.borrows = [...(d.borrows || []), {
       id: uid(),
       bookId: res.bookId,
       memberId: res.memberId,
@@ -992,6 +1001,7 @@ export const DataProvider = ({ children }) => {
   const addBooking = useCallback(({ bookId, memberId, pickupDate }) => addReservation(bookId, memberId, pickupDate), [addReservation]);
   const cancelBooking = useCallback((id) => cancelReservation(id), [cancelReservation]);
   const approveBooking = useCallback((id) => approveReservation(id), [approveReservation]);
+  const rejectBooking = useCallback((id) => rejectReservation(id), [rejectReservation]);
 
   // ── Settings ──────────────────────────────────────────────
   const updateSettings = useCallback((updates) => {
@@ -1039,8 +1049,8 @@ export const DataProvider = ({ children }) => {
     // Borrows
     addBorrow, returnBorrow, markLost, deleteBorrow,
     // Reservations
-    addReservation, cancelReservation, approveReservation,
-    addBooking, cancelBooking, approveBooking,
+    addReservation, cancelReservation, approveReservation, rejectReservation,
+    addBooking, cancelBooking, approveBooking, rejectBooking,
     // Settings
     updateSettings,
     // Derived
