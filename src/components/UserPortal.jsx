@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../hooks/useData';
-import { formatCurrency } from '../utils/helpers';
+import { formatCurrency, formatDate, isMembershipExpired, daysBetween, today } from '../utils/helpers';
 
 export default function UserPortal() {
   const { data, currentUser, addReservation } = useData();
@@ -10,31 +10,32 @@ export default function UserPortal() {
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [publisherFilter, setPublisherFilter] = useState('All');
   const [yearFilter, setYearFilter] = useState('All');
-  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'available' | 'popular' | 'recommended'
+  const [activeTab, setActiveTab] = useState('all');
+
+  const isExpired = isMembershipExpired(currentUser?.membershipExpiryDate);
+  const daysLeft = currentUser?.membershipExpiryDate ? daysBetween(today(), currentUser.membershipExpiryDate) : 0;
 
   // Dynamic filter lists
-  const categories = useMemo(() => ['All', ...Array.from(new Set(books.map(b => b.category).filter(Boolean)))], [books]);
-  const publishers = useMemo(() => ['All', ...Array.from(new Set(books.map(b => b.publisher).filter(Boolean)))], [books]);
-  const publishYears = useMemo(() => ['All', ...Array.from(new Set(books.map(b => b.publishYear).filter(Boolean))).sort((a, b) => b - a)], [books]);
+  const categories = useMemo(() => ['All', ...Array.from(new Set(books.map((b) => b.category).filter(Boolean)))], [books]);
+  const publishers = useMemo(() => ['All', ...Array.from(new Set(books.map((b) => b.publisher).filter(Boolean)))], [books]);
+  const publishYears = useMemo(() => ['All', ...Array.from(new Set(books.map((b) => b.publishYear).filter(Boolean))).sort((a, b) => b - a)], [books]);
 
-  // Compute popular/trending books based on borrow & reservation counts
+  // Popular books
   const popularBooks = useMemo(() => {
     const counts = {};
-    borrows.forEach(br => { counts[br.bookId] = (counts[br.bookId] || 0) + 1; });
-    reservations.forEach(r => { counts[r.bookId] = (counts[r.bookId] || 0) + 1; });
+    (borrows || []).forEach((br) => { counts[br.bookId] = (counts[br.bookId] || 0) + 1; });
+    (reservations || []).forEach((r) => { counts[r.bookId] = (counts[r.bookId] || 0) + 1; });
     return [...books].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
   }, [books, borrows, reservations]);
 
-  // Recommended books
   const recommendedBooks = useMemo(() => {
-    return books.filter(b => b.available > 0).slice(0, 4);
+    return books.filter((b) => b.available > 0).slice(0, 4);
   }, [books]);
 
-  // Filtered catalog
   const filteredBooks = useMemo(() => {
     let list = books;
     if (activeTab === 'available') {
-      list = list.filter(b => b.available > 0);
+      list = list.filter((b) => b.available > 0);
     } else if (activeTab === 'popular') {
       list = popularBooks;
     } else if (activeTab === 'recommended') {
@@ -43,7 +44,7 @@ export default function UserPortal() {
 
     if (search.trim()) {
       const s = search.toLowerCase();
-      list = list.filter(b =>
+      list = list.filter((b) =>
         b.title.toLowerCase().includes(s) ||
         b.author.toLowerCase().includes(s) ||
         (b.publisher && b.publisher.toLowerCase().includes(s)) ||
@@ -51,13 +52,13 @@ export default function UserPortal() {
       );
     }
     if (categoryFilter !== 'All') {
-      list = list.filter(b => b.category === categoryFilter);
+      list = list.filter((b) => b.category === categoryFilter);
     }
     if (publisherFilter !== 'All') {
-      list = list.filter(b => b.publisher === publisherFilter);
+      list = list.filter((b) => b.publisher === publisherFilter);
     }
     if (yearFilter !== 'All') {
-      list = list.filter(b => b.publishYear === parseInt(yearFilter));
+      list = list.filter((b) => b.publishYear === parseInt(yearFilter));
     }
     return list;
   }, [books, activeTab, popularBooks, recommendedBooks, search, categoryFilter, publisherFilter, yearFilter]);
@@ -69,11 +70,29 @@ export default function UserPortal() {
 
   const isBookedByMe = (bookId) => {
     if (!currentUser) return false;
-    return reservations.some(r => r.bookId === bookId && r.memberId === currentUser.id && r.status === 'pending');
+    return (reservations || []).some((r) => r.bookId === bookId && r.memberId === currentUser.id && r.status === 'pending');
   };
 
   return (
     <div className="space-y-6">
+      {/* Expired Membership Alert */}
+      {isExpired && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center justify-between text-red-800 animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <i className="fas fa-triangle-exclamation text-2xl text-red-600" />
+            <div>
+              <p className="font-bold text-sm">Membership Expired</p>
+              <p className="text-xs text-red-700">
+                Your library membership expired on {formatDate(currentUser?.membershipExpiryDate)}. Book reservations and borrowing privileges are temporarily suspended. Please contact library admin to renew.
+              </p>
+            </div>
+          </div>
+          <span className="text-xs bg-red-600 text-white font-bold px-3 py-1.5 rounded-xl whitespace-nowrap">
+            Renewal: {formatCurrency(settings?.membershipRenewalFee || 500, settings?.currency)}
+          </span>
+        </div>
+      )}
+
       {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -81,15 +100,28 @@ export default function UserPortal() {
           <p className="text-blue-100 text-sm mt-1">
             Explore our collection, search by publisher/year, or reserve your next book for {formatCurrency(settings?.reservationFee, settings?.currency)}.
           </p>
+          <div className="mt-2 text-xs text-blue-200 font-medium flex items-center gap-2">
+            <i className="fas fa-id-card text-blue-300" />
+            <span>Membership ID: <strong className="font-mono text-white">{currentUser?.membershipId || '—'}</strong></span>
+            <span>·</span>
+            <span>
+              {isExpired ? (
+                <span className="text-red-200 font-bold">Expired on {formatDate(currentUser?.membershipExpiryDate)}</span>
+              ) : (
+                <span>Valid until <strong className="text-white">{formatDate(currentUser?.membershipExpiryDate)}</strong> ({daysLeft} days left)</span>
+              )}
+            </span>
+          </div>
         </div>
+
         <div className="flex gap-2">
-          <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-center">
-            <div className="text-xl font-bold">{books.filter(b => b.available > 0).length}</div>
+          <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl text-center">
+            <div className="text-xl font-bold">{books.filter((b) => b.available > 0).length}</div>
             <div className="text-xs text-blue-100">Available Titles</div>
           </div>
-          <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-center">
+          <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl text-center">
             <div className="text-xl font-bold">
-              {reservations.filter(r => r.memberId === currentUser?.id && r.status === 'pending').length}
+              {(reservations || []).filter((r) => r.memberId === currentUser?.id && r.status === 'pending').length}
             </div>
             <div className="text-xs text-blue-100">My Reservations</div>
           </div>
@@ -103,11 +135,11 @@ export default function UserPortal() {
           { id: 'available', label: 'Books Available', icon: 'fa-circle-check' },
           { id: 'popular', label: 'Popular & Trending', icon: 'fa-fire' },
           { id: 'recommended', label: 'Recommendations', icon: 'fa-star' },
-        ].map(tab => (
+        ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-2 ${
               activeTab === tab.id
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
@@ -120,14 +152,14 @@ export default function UserPortal() {
       </div>
 
       {/* Filter Controls */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-wrap gap-3 items-center">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-wrap gap-3 items-center">
         <div className="flex-1 min-w-[200px]">
           <div className="relative">
-            <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+            <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
             <input
               type="text"
-              placeholder="Search title, author, publisher..."
-              className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              placeholder="Search title, author, publisher, ISBN..."
+              className="w-full pl-10 pr-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -135,43 +167,43 @@ export default function UserPortal() {
         </div>
 
         <select
-          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
+          className="border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
         >
           <option value="All">All Categories</option>
-          {categories.filter(c => c !== 'All').map(c => <option key={c} value={c}>{c}</option>)}
+          {categories.filter((c) => c !== 'All').map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
 
         <select
-          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
+          className="border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
           value={publisherFilter}
           onChange={(e) => setPublisherFilter(e.target.value)}
         >
           <option value="All">All Publishers</option>
-          {publishers.filter(p => p !== 'All').map(p => <option key={p} value={p}>{p}</option>)}
+          {publishers.filter((p) => p !== 'All').map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
 
         <select
-          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
+          className="border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
           value={yearFilter}
           onChange={(e) => setYearFilter(e.target.value)}
         >
           <option value="All">Publication Year</option>
-          {publishYears.filter(y => y !== 'All').map(y => <option key={y} value={y}>{y}</option>)}
+          {publishYears.filter((y) => y !== 'All').map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
 
       {/* Book Cards Grid */}
       {filteredBooks.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center text-slate-400">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center text-slate-400">
           <i className="fas fa-book-open text-5xl mb-3 block text-slate-300" />
           <p className="text-base font-medium">No matching books found.</p>
-          <p className="text-xs text-slate-400 mt-1">Try adjusting your category, publisher, or search keywords.</p>
+          <p className="text-xs text-slate-400 mt-1">Try adjusting your filters or search keywords.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredBooks.map(book => {
+          {filteredBooks.map((book) => {
             const booked = isBookedByMe(book.id);
             const isAvailable = book.available > 0;
 
@@ -228,7 +260,7 @@ export default function UserPortal() {
                   </div>
                 </div>
 
-                <div className="mt-4 pt-3 flex items-center justify-between">
+                <div className="mt-4 pt-3 flex items-center justify-between border-t border-slate-100">
                   <div className="text-xs">
                     <span className={`inline-flex items-center gap-1 font-semibold ${isAvailable ? 'text-emerald-600' : 'text-rose-500'}`}>
                       <i className={`fas ${isAvailable ? 'fa-check-circle' : 'fa-times-circle'}`} />
@@ -237,14 +269,22 @@ export default function UserPortal() {
                   </div>
 
                   {booked ? (
-                    <span className="bg-amber-100 text-amber-800 text-xs px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1">
+                    <span className="bg-amber-100 text-amber-800 text-xs px-3 py-1.5 rounded-xl font-semibold flex items-center gap-1">
                       <i className="fas fa-clock" /> Reserved
                     </span>
+                  ) : isExpired ? (
+                    <button
+                      disabled
+                      className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-red-50 text-red-400 border border-red-200 cursor-not-allowed"
+                      title="Please renew your membership to reserve books"
+                    >
+                      <i className="fas fa-ban mr-1" /> Expired
+                    </button>
                   ) : (
                     <button
                       disabled={!isAvailable}
                       onClick={() => handleBookNow(book.id)}
-                      className={`px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+                      className={`px-4 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
                         isAvailable
                           ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
                           : 'bg-slate-100 text-slate-400 cursor-not-allowed'

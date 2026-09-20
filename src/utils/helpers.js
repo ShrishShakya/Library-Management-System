@@ -11,6 +11,7 @@ export const daysFromNow = (n) => {
 };
 
 export const daysBetween = (a, b) => {
+  if (!a || !b) return 0;
   const d1 = new Date(a + 'T00:00:00');
   const d2 = new Date(b + 'T00:00:00');
   return Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
@@ -26,8 +27,21 @@ export const formatDate = (d) => {
 
 export const isOverdue = (dueDate) => dueDate && dueDate < today();
 
-export const formatCurrency = (n, symbol = '$') =>
-  `${symbol}${(Number(n) || 0).toFixed(2)}`;
+export const isMembershipExpired = (expiryDate) => Boolean(expiryDate && expiryDate < today());
+
+export const isMembershipExpiringSoon = (expiryDate, daysThreshold = 30) => {
+  if (!expiryDate) return false;
+  const daysLeft = daysBetween(today(), expiryDate);
+  return daysLeft >= 0 && daysLeft <= daysThreshold;
+};
+
+export const formatCurrency = (n, symbol = 'NRs.') => {
+  const s = symbol ? symbol.trim() : 'NRs.';
+  return `${s} ${(Number(n) || 0).toFixed(2)}`;
+};
+
+// ── Phone normalization ─────────────────────────────────────
+export const normalizePhone = (p) => (p ? String(p).replace(/\D/g, '') : '');
 
 // ── Membership ID generator ─────────────────────────────────
 // Format: LIB-YYYY-XXXXX  (e.g., LIB-2026-00042)
@@ -43,9 +57,6 @@ export const generateMembershipId = (existingIds = []) => {
 };
 
 // ── Tiered overdue fine calculator ──────────────────────────
-// tiers: [{ days: 1, finePerDay: 0.25 }, { days: 7, finePerDay: 0.5 }, ...]
-// Sorted ascending by `days`. The applicable rate is the highest tier
-// whose `days` threshold is <= the number of days overdue.
 export const calculateOverdueFine = (dueDate, tiers = []) => {
   if (!dueDate) return 0;
   const overdueDays = daysBetween(dueDate, today());
@@ -59,8 +70,9 @@ export const calculateOverdueFine = (dueDate, tiers = []) => {
   return overdueDays * rate;
 };
 
-// ── Password hashing (demo only – use bcrypt server-side!) ─
+// ── Password hashing ────────────────────────────────────────
 export const simpleHash = (str) => {
+  if (!str) return '';
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     hash = (hash << 5) - hash + str.charCodeAt(i);
